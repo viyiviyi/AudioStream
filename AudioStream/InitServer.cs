@@ -1,0 +1,23 @@
+﻿
+using AudioStream.AudioServer;
+
+namespace AudioStream
+{
+    internal static class InitServer
+    {
+        static TcpServer tcpServer = new TcpServer();
+        static HttpServer httpServer = new HttpServer();
+        public static PlayerControl playerControl = new PlayerControl();
+        public static void Init()
+        {
+            tcpServer.StartAsync();
+            httpServer.StartAsync();
+        }
+
+        public static void Stop()
+        {
+            tcpServer.Dispose();
+            httpServer.Dispose();
+        }
+    }
+}
