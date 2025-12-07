@@ -16,6 +16,7 @@ namespace AudioStream
 
         public static void Stop()
         {
+            playerControl.Dispose();
             tcpServer.Dispose();
             httpServer.Dispose();
         }

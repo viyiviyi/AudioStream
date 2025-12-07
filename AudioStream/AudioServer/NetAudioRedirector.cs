@@ -37,6 +37,9 @@ namespace AudioStream.AudioServer
                 wasapiOut.Latency = 1;
                 stream = new NetworkStream(clientSocket);
                 clientSocket.NoDelay = false;
+                clientSocket.ReceiveBufferSize = 32 * 1024;
+                clientSocket.SendBufferSize = 32 * 1024;
+                clientSocket.ReceiveTimeout = 2;
                 clientSocket.Send(Encoding.UTF8.GetBytes("/Start"));
                 soundInSource = new NetworkStreamSource(stream, waveFormat);
                 Console.WriteLine("WaveFormat: " + waveFormat.ToString());
@@ -116,12 +119,13 @@ namespace AudioStream.AudioServer
         public void Dispose()
         {
             clientSocket?.Send(Encoding.UTF8.GetBytes("/Pause"));
+            clientSocket?.Dispose();
+            clientSocket = null;
             wasapiOut?.Dispose();
             wasapiOut = null;
             soundInSource?.Dispose();
             soundInSource = null;
             clientSocket?.Dispose();
-            clientSocket = null;
         }
         private class NetworkStreamSource : IWaveSource
         {
