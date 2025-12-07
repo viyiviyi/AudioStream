@@ -25,8 +25,11 @@ namespace AudioStream.AudioServer
                     {
                         foreach (var item in list)
                         {
-                            item.Play = false;
                             playerInfos.Add(item);
+                            if (item.Play)
+                            {
+                                Start(item);
+                            }
                         }
                     }
                 }
@@ -73,7 +76,6 @@ namespace AudioStream.AudioServer
             };
             if (Start(info))
             {
-                SavePlayers();
                 return info;
             }
             else
@@ -112,6 +114,7 @@ namespace AudioStream.AudioServer
                 playerIdToMap[player.ID] = player;
                 players.Add(player);
                 player.Start();
+                SavePlayers();
                 return true;
             }
             catch (Exception e)
@@ -130,6 +133,7 @@ namespace AudioStream.AudioServer
                 player.Dispose();
                 players.Remove(player);
                 playerIdToMap.Remove(Guid.Parse(guid));
+                SavePlayers();
                 return true;
             }
             return false;
