@@ -36,11 +36,21 @@ namespace AudioStream
             wasapiOut.Device = targetDevice;
             wasapiOut.Latency = 1;
             wasapiOut.Initialize(soundInSource.ToSampleSource().ToWaveSource());
+            wasapiOut.Volume = 1;
             wasapiCapture.DataAvailable += (s, e) =>
             {
                 if (wasapiOut.PlaybackState != PlaybackState.Playing)
                     wasapiOut.Play();
             };
+            wasapiCapture.Start();
+        }
+        public void SetDevice(MMDevice outputDevice)
+        {
+            if (wasapiOut == null) return;
+            wasapiCapture.Stop();
+            wasapiOut.Stop();
+            wasapiOut.Device.Dispose();
+            wasapiOut.Device = outputDevice;
             wasapiCapture.Start();
         }
         private void Stop()

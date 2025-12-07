@@ -25,6 +25,7 @@ namespace Common.Helper
                     }
                 }
             }
+
         }
 
         public static MMDevice GetDeviceById(string deviceId)

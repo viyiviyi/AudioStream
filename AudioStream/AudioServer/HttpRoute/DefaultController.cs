@@ -8,6 +8,8 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using System.Windows.Forms.VisualStyles;
+using static AudioStream.TcpServer;
 
 namespace AudioStream.AudioServer.HttpRoute
 {
@@ -38,6 +40,12 @@ namespace AudioStream.AudioServer.HttpRoute
             return new HttpResult<List<PlayerInfo>>() { Result= InitServer.playerControl.GetPlayerInfoList() };
         }
 
+        [Route(HttpVerbs.Get, "/clients")]
+        public HttpResult<List<ClientItem>> Clients()
+        {
+            return new HttpResult<List<ClientItem>>() { Result = InitServer.tcpServer.ClientItems() };
+        }
+
         [Route(HttpVerbs.Post, "/add_player")]
         public HttpResult AddPlayer()
         {
@@ -45,15 +53,37 @@ namespace AudioStream.AudioServer.HttpRoute
             var ip = ctx.Request.QueryString.Get("ip");
             var sourceDeviceID = ctx.Request.QueryString.Get("s_device");
             var targetDeviceID = ctx.Request.QueryString.Get("t_device");
+            var sourceDeviceName = ctx.Request.QueryString.Get("s_device_name");
+            var targetDeviceName = ctx.Request.QueryString.Get("t_device_name");
             if (string.IsNullOrEmpty(targetDeviceID))
             {
                 return new ResultError()
                 {
+                    Success = false,
                     Code = 500,
                     Message = "参数t_device(播放设备)不能为空"
                 };
             }
-            return new HttpResult() { Result = InitServer.playerControl.Add(sourceDeviceID, targetDeviceID, ip) };
+            if (string.IsNullOrEmpty(sourceDeviceID))
+            {
+                return new ResultError()
+                {
+                    Success = false,
+                    Code = 500,
+                    Message = "参数s_device(播放设备)不能为空"
+                };
+            }
+            var players = InitServer.playerControl.GetPlayerInfoList();
+            if (players.Any(a => a.IP == ip && a.TargetDeiceID == targetDeviceID && a.SourceDeviceID == sourceDeviceID))
+            {
+                return new ResultError()
+                {
+                    Success = false,
+                    Code = 500,
+                    Message = "请勿重复添加"
+                };
+            }
+            return new HttpResult() { Result = InitServer.playerControl.Add(sourceDeviceID, targetDeviceID, ip, sourceDeviceName, targetDeviceName) };
         }
 
         [Route(HttpVerbs.Post, "/play")]
@@ -65,6 +95,7 @@ namespace AudioStream.AudioServer.HttpRoute
             {
                 return new ResultError()
                 {
+                    Success = false,
                     Code = 500,
                     Message = "参数id不能为空"
                 };
@@ -81,6 +112,7 @@ namespace AudioStream.AudioServer.HttpRoute
             {
                 return new ResultError()
                 {
+                    Success = false,
                     Code = 500,
                     Message = "参数id不能为空"
                 };
@@ -100,6 +132,7 @@ namespace AudioStream.AudioServer.HttpRoute
             {
                 return new ResultError()
                 {
+                    Success = false,
                     Code = 500,
                     Message = "参数id不能为空"
                 };

@@ -4,12 +4,16 @@ using Common;
 using EmbedIO;
 using EmbedIO.WebApi;
 using System;
+using System.IO;
+using System.Reflection;
+using System.Threading.Tasks;
 
 namespace AudioStream
 {
     public class HttpServer : IDisposable
     {
         static WebServer webServer = new WebServer();
+        static int _port = 12570;
         public HttpServer()
         {
             
@@ -19,9 +23,11 @@ namespace AudioStream
             try
             {
                 webServer = new WebServer(o => o
-                       .WithUrlPrefix("http://*:12570")
+                       .WithUrlPrefix("http://*:" + _port)
                        .WithMode(HttpListenerMode.EmbedIO))
-                   .WithWebApi("/api", m => m.WithController<DefaultController>());
+                    .WithCors("*")
+                   .WithWebApi("/api", m => m.WithController<DefaultController>())
+                   .WithStaticFolder("/", "web", false);
                 await webServer.RunAsync();
                 Logger.Info("Http服务启动");
 

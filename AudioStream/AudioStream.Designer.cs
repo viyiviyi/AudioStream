@@ -2,7 +2,7 @@
 
 namespace AudioStream
 {
-    partial class Form1
+    partial class AudioStream
     {
         /// <summary>
         /// 必需的设计器变量。
@@ -31,15 +31,22 @@ namespace AudioStream
         private void InitializeComponent()
         {
             this.SuspendLayout();
+            this.Visible = false;
             // 
             // Form1
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 12F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            this.ClientSize = new System.Drawing.Size(800, 450);
-            this.Name = "Form1";
+            this.ClientSize = new System.Drawing.Size(20, 20);
+            this.Name = "音频流转";
             this.Text = "AudioStream";
             this.ResumeLayout(false);
+            this.ShowIcon = false;
+            this.ShowInTaskbar = false;
+            this.MaximizeBox = false;
+            this.MinimizeBox = false;
+            this.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
+            this.FormBorderStyle = System.Windows.Forms.FormBorderStyle.None;
 
         }
 

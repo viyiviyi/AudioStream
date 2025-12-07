@@ -1,7 +1,8 @@
-﻿using System;
-using System.Threading.Tasks;
-using Common;
+﻿using Common;
 using Common.Helper;
+using CSCore.CoreAudioAPI;
+using System;
+using System.Threading.Tasks;
 
 namespace AudioStream.AudioServer
 {
@@ -9,25 +10,53 @@ namespace AudioStream.AudioServer
     {
         private readonly PlayerInfo playerInfo;
         private IPlayerRedirector audioRedirector;
+        private MMDeviceEnumerator deviceEnumerator;
         public Guid ID { get => playerInfo.ID; }
         public Player(PlayerInfo info)
         {
+            deviceEnumerator = new MMDeviceEnumerator();
             playerInfo = info;
+        }
+
+        public void OnDefaultChange(Object obj, DefaultDeviceChangedEventArgs args)
+        {
+            var defaultDeviceId = args.DeviceId;
+            if (!string.IsNullOrWhiteSpace(defaultDeviceId))
+            {
+                var device = AudioDeviceHelper.GetDeviceById(defaultDeviceId);
+                if (device != null)
+                {
+                    audioRedirector.SetDevice(device);
+                }
+            }
         }
 
         public async void Start()
         {
-            var device = AudioDeviceHelper.GetDeviceById(playerInfo.TargetDeiceID);
+            var deviceId = playerInfo.TargetDeiceID;
+            if (deviceId.ToLower() == "default")
+            {
+                deviceId = AudioDeviceHelper.GetDefaultOutputDeviceId();
+                deviceEnumerator.DefaultDeviceChanged += OnDefaultChange;
+            }
+            var device = AudioDeviceHelper.GetDeviceById(deviceId);
             if (device == null) return;
             playerInfo.Play = true;
-            await Task.Run(() => {
+            await Task.Run(() =>
+            {
                 if (Tools.IsPrivateIPAddress(playerInfo.IP))
                 {
                     audioRedirector = new NetAudioRedirector(device, playerInfo.IP, playerInfo.SourceDeviceID);
                 }
                 else
                 {
-                    var sourceDevice = AudioDeviceHelper.GetDeviceById(playerInfo.SourceDeviceID);
+                    var sourceDeviceId = playerInfo.SourceDeviceID;
+                    if (sourceDeviceId.ToLower() == "default")
+                    {
+                        sourceDeviceId = AudioDeviceHelper.GetDefaultOutputDeviceId();
+                    }
+                    if (sourceDeviceId == deviceId) return;
+                    var sourceDevice = AudioDeviceHelper.GetDeviceById(sourceDeviceId);
                     audioRedirector = new LocalAudioRedirector(sourceDevice, device);
                 }
             });
@@ -46,7 +75,13 @@ namespace AudioStream.AudioServer
         public void Dispose()
         {
             playerInfo.Play = false;
-            audioRedirector.Dispose();
+            if (audioRedirector != null)
+                audioRedirector.Dispose();
+            if (deviceEnumerator != null)
+            {
+                deviceEnumerator.DefaultDeviceChanged -= OnDefaultChange;
+                deviceEnumerator.Dispose();
+            }
         }
     }
 }

@@ -20,6 +20,7 @@ namespace AudioStream.AudioServer
         private Socket clientSocket;
         private NetworkStream stream;
         private WaveFormat waveFormat;
+        private NetworkStreamSource soundInSource;
         public float Volume { get => wasapiOut != null ? wasapiOut.Volume : 1; set => wasapiOut.Volume = value; }
         public NetAudioRedirector(MMDevice outputDevice, string address,string sourceDeviceID = null)
         {
@@ -35,10 +36,12 @@ namespace AudioStream.AudioServer
                 wasapiOut.Device = outputDevice;
                 wasapiOut.Latency = 1;
                 stream = new NetworkStream(clientSocket);
+                clientSocket.NoDelay = false;
                 clientSocket.Send(Encoding.UTF8.GetBytes("/Start"));
-                var soundInSource = new NetworkStreamSource(stream, waveFormat);
+                soundInSource = new NetworkStreamSource(stream, waveFormat);
                 Console.WriteLine("WaveFormat: " + waveFormat.ToString());
                 wasapiOut.Initialize(soundInSource.ToSampleSource().ToWaveSource());
+                wasapiOut.Volume = 1;
                 if (wasapiOut != null && wasapiOut.PlaybackState != PlaybackState.Playing)
                     wasapiOut.Play();
             }
@@ -46,6 +49,15 @@ namespace AudioStream.AudioServer
             {
                 Console.WriteLine(e.Message);
             }
+        }
+
+        public void SetDevice(MMDevice outputDevice)
+        {
+            if (wasapiOut == null) return;
+            wasapiOut.Stop();
+            wasapiOut.Device.Dispose();
+            wasapiOut.Device = outputDevice;
+            wasapiOut.Play();
         }
 
         private void Connect()
@@ -103,13 +115,13 @@ namespace AudioStream.AudioServer
 
         public void Dispose()
         {
-            if (wasapiOut != null) wasapiOut.Dispose();
+            clientSocket?.Send(Encoding.UTF8.GetBytes("/Pause"));
+            wasapiOut?.Dispose();
             wasapiOut = null;
-            if (clientSocket != null){
-                clientSocket.Send(Encoding.UTF8.GetBytes("/Pause"));
-                clientSocket.Dispose();
-            }
-            if (stream != null) stream.Dispose();
+            soundInSource?.Dispose();
+            soundInSource = null;
+            clientSocket?.Dispose();
+            clientSocket = null;
         }
         private class NetworkStreamSource : IWaveSource
         {
@@ -132,7 +144,7 @@ namespace AudioStream.AudioServer
                 {
                     return _stream.Read(buffer, offset, count);
                 }
-                catch (Exception)
+                catch (Exception ex)
                 {
                     return 0; // Indicate end of stream or error
                 }

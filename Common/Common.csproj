@@ -58,6 +58,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Helper\AudioDeviceHelper.cs" />
+    <Compile Include="Helper\AutoStartHelper.cs" />
     <Compile Include="Helper\HttpRequestHelper.cs" />
     <Compile Include="Logger.cs" />
     <Compile Include="Helper\NetworkHelper.cs" />

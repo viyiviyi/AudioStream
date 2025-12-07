@@ -6,7 +6,9 @@ namespace AudioStream.AudioServer
     {
         public Guid ID { get; set; }
         public string SourceDeviceID { get; set; }
+        public string SourceDeviceName { get; set; }
         public string TargetDeiceID { get; set; }
+        public string TargetDeiceName { get; set; }
         public string IP { get; set; }
         public string PcName { get; set; }
         public string RemakeName { get; set; }

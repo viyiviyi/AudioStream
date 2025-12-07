@@ -5,7 +5,7 @@ namespace AudioStream
 {
     internal static class InitServer
     {
-        static TcpServer tcpServer = new TcpServer();
+        public static TcpServer tcpServer = new TcpServer();
         static HttpServer httpServer = new HttpServer();
         public static PlayerControl playerControl = new PlayerControl();
         public static void Init()

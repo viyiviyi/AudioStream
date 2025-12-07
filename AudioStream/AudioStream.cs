@@ -14,12 +14,13 @@ using System.Windows.Forms;
 
 namespace AudioStream
 {
-    public partial class Form1 : Form
+    public partial class AudioStream : Form
     {
         TcpServer tcpServer = new TcpServer();
-        public Form1()
+        public AudioStream()
         {
             InitializeComponent();
+            this.Visible = false;
             InitServer.Init();
             Disposed += (s, e) =>
             {

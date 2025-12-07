@@ -1,5 +1,7 @@
-﻿using Common.Helper;
+﻿using AudioStream.AudioServer.Model;
+using Common.Helper;
 using CSCore;
+using CSCore.XAudio2.X3DAudio;
 using System;
 using System.Collections.Generic;
 using System.Drawing;
@@ -9,6 +11,7 @@ using System.Net;
 using System.Net.Http;
 using System.Net.Sockets;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace AudioStream
@@ -19,6 +22,7 @@ namespace AudioStream
         private int _port = 12670;
         private readonly List<TcpClient> _clients = new List<TcpClient>();
         private readonly List<TcpAudioServer> tcpAudioServers = new List<TcpAudioServer>();
+        private readonly List<ClientItem> clientItems = new List<ClientItem>();
         private readonly object _clientsLock = new object(); // For thread safety when accessing _clients
         private bool _isRunning = false;
         public TcpServer()
@@ -38,6 +42,7 @@ namespace AudioStream
             try
             {
                 _listener = new TcpListener(IPAddress.Any, _port);
+                _listener.Server.NoDelay = true;
                 _listener.Start();
                 _isRunning = true;
                 Console.WriteLine($"Server started on port {_port}.");
@@ -72,6 +77,7 @@ namespace AudioStream
                     {
                         Console.WriteLine($"Exception in AcceptTcpClientAsync: {ex}");
                     }
+                    Thread.Sleep(1);
                 }
             }
             catch (SocketException ex)
@@ -92,35 +98,70 @@ namespace AudioStream
                 await Task.Run(() =>
                 {
                     byte[] buffer = new byte[1024];
-                    int bytesRead;
+                    int bytesRead = 0;
+                    var isRun = true;
                     // 循环读取客户端发送的数据
-                    while (_isRunning && clientStream.CanRead && (bytesRead = clientStream.Read(buffer, 0, buffer.Length)) > 0)
+                    while (_isRunning && isRun && client.Connected && clientStream.CanRead)
                     {
+                        try
+                        {
+                            bytesRead = clientStream.Read(buffer, 0, buffer.Length);
+                        }
+                        catch (Exception)
+                        {
+                            break;
+                        }
+                        if (bytesRead <= 0)
+                        {
+                            Thread.Sleep(1);
+                            continue;
+                        }
                         // 将接收到的字节数据转换为字符串
                         string dataReceived = Encoding.UTF8.GetString(buffer, 0, bytesRead);
                         Console.WriteLine($"Received: {dataReceived}");
-                        bool play = false;
                         if (dataReceived.StartsWith("/Start"))
                         {
-                            play = true;
                             audioServer.Start();
                         }
                         if (dataReceived.StartsWith("/Pause"))
                         {
-                            audioServer.Stop();
-                            play = false;
+                            break;
                         }
                         if (dataReceived.StartsWith("/WaveFormat/"))
                         {
                             var id = dataReceived.Split('/')[2];
+                            if (id.ToLower() == "default")
+                            {
+                                id = AudioDeviceHelper.GetDefaultOutputDeviceId();
+                            }
                             var device = AudioDeviceHelper.GetDeviceById(id);
                             if (device != null)
                             {
                                 audioServer = new TcpAudioServer(device, (data, len) =>
                                 {
-                                    clientStream.Write(data, 0, len);
+                                    if (!_isRunning)
+                                    {
+                                        isRun = false;
+                                        return;
+                                    }
+                                    if (!client.Connected)
+                                    {
+                                        isRun = false;
+                                        return;
+                                    }
+                                    try
+                                    {
+                                        if (clientStream.CanWrite)
+                                            clientStream.Write(data, 0, len);
+                                    }
+                                    catch (Exception)
+                                    {
+                                        isRun = false;
+                                        return;
+                                    }
                                 });
                                 tcpAudioServers.Add(audioServer);
+                                clientItems.Add(new ClientItem() { DeviceName = device.FriendlyName, ClientIp = ((IPEndPoint)client.Client.RemoteEndPoint).Address.ToString() });
                                 using (MemoryStream stream = new MemoryStream())
                                 using (BinaryWriter writer = new BinaryWriter(stream))
                                 {
@@ -153,15 +194,19 @@ namespace AudioStream
                                 RemoveClient(client);
                             }
                         }
+                        Thread.Sleep(1);
                     }
 
                 });
             }
             finally
             {
-                audioServer?.Dispose();
-                tcpAudioServers.Remove(audioServer);
                 clientStream.Dispose();
+                client.Dispose();
+                audioServer?.Dispose();
+                var idx = tcpAudioServers.IndexOf(audioServer);
+                if (idx >= 0) clientItems.RemoveAt(idx);
+                tcpAudioServers.Remove(audioServer);
             }
         }
 
@@ -206,13 +251,18 @@ namespace AudioStream
             }
             Console.WriteLine("Server stopped.");
         }
-        
+
         private void RemoveClient(TcpClient client)
         {
             lock (_clientsLock)
             {
                 _clients.Remove(client);
             }
+        }
+
+        public List<ClientItem> ClientItems()
+        {
+            return clientItems;
         }
 
         public void Dispose()

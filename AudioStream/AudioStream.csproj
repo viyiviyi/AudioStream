@@ -32,6 +32,9 @@
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
   </PropertyGroup>
+  <PropertyGroup>
+    <ApplicationIcon>icon.ico</ApplicationIcon>
+  </PropertyGroup>
   <ItemGroup>
     <Reference Include="CSCore, Version=1.2.1.2, Culture=neutral, PublicKeyToken=5a08f2b6f4415dea, processorArchitecture=MSIL">
       <HintPath>..\packages\CSCore.1.2.1.2\lib\net35-client\CSCore.dll</HintPath>
@@ -64,6 +67,7 @@
   <ItemGroup>
     <Compile Include="AudioServer\HttpRoute\DefaultController.cs" />
     <Compile Include="AudioServer\IPlayerRedirector.cs" />
+    <Compile Include="AudioServer\Model\ClientItem.cs" />
     <Compile Include="AudioServer\Model\DeviceInfo.cs" />
     <Compile Include="AudioServer\Model\PlayerInfo.cs" />
     <Compile Include="AudioServer\NetAudioRedirector.cs" />
@@ -72,18 +76,18 @@
     <Compile Include="AudioServer\PlayerControl.cs" />
     <Compile Include="AudioServer\TcpAudioServer.cs" />
     <Compile Include="AudioServer\LocalAudioRedirector.cs" />
-    <Compile Include="Form1.cs">
+    <Compile Include="AudioStream.cs">
       <SubType>Form</SubType>
     </Compile>
-    <Compile Include="Form1.Designer.cs">
-      <DependentUpon>Form1.cs</DependentUpon>
+    <Compile Include="AudioStream.Designer.cs">
+      <DependentUpon>AudioStream.cs</DependentUpon>
     </Compile>
     <Compile Include="InitServer.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="AudioServer\TcpServer.cs" />
-    <EmbeddedResource Include="Form1.resx">
-      <DependentUpon>Form1.cs</DependentUpon>
+    <EmbeddedResource Include="AudioStream.resx">
+      <DependentUpon>AudioStream.cs</DependentUpon>
     </EmbeddedResource>
     <EmbeddedResource Include="Properties\Resources.resx">
       <Generator>ResXFileCodeGenerator</Generator>
@@ -108,7 +112,14 @@
   <ItemGroup>
     <None Include="App.config" />
   </ItemGroup>
-  <ItemGroup />
+  <ItemGroup>
+    <Content Include="icon.ico">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="web\index.html">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Common\Common.csproj">
       <Project>{97691851-4D4C-4497-B023-D3A73429B9D4}</Project>
