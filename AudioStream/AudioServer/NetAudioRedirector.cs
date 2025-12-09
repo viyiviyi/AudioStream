@@ -2,15 +2,10 @@
 using CSCore.CoreAudioAPI;
 using CSCore.SoundOut;
 using System;
-using System.Collections.Generic;
 using System.IO;
-using System.Linq;
-using System.Net;
 using System.Net.Sockets;
-using System.Runtime.Remoting.Contexts;
 using System.Text;
-using System.Threading.Tasks;
-
+using System.Threading;
 namespace AudioStream.AudioServer
 {
     internal class NetAudioRedirector : IPlayerRedirector
@@ -21,6 +16,7 @@ namespace AudioStream.AudioServer
         private NetworkStream stream;
         private WaveFormat waveFormat;
         private NetworkStreamSource soundInSource;
+        private Timer timer;
         public float Volume { get => wasapiOut != null ? wasapiOut.Volume : 1; set => wasapiOut.Volume = value; }
         public NetAudioRedirector(MMDevice outputDevice, string address,string sourceDeviceID = null)
         {
@@ -34,7 +30,7 @@ namespace AudioStream.AudioServer
 
                 wasapiOut = new WasapiOut();
                 wasapiOut.Device = outputDevice;
-                wasapiOut.Latency = 1;
+                wasapiOut.Latency = 10;
                 stream = new NetworkStream(clientSocket);
                 clientSocket.NoDelay = false;
                 clientSocket.ReceiveBufferSize = 32 * 1024;
@@ -45,6 +41,15 @@ namespace AudioStream.AudioServer
                 Console.WriteLine("WaveFormat: " + waveFormat.ToString());
                 wasapiOut.Initialize(soundInSource.ToSampleSource().ToWaveSource());
                 wasapiOut.Volume = 1;
+                timer = new Timer((t) => {
+                    try
+                    {
+                        clientSocket.Send(Encoding.UTF8.GetBytes("/Ping"));
+                    }
+                    catch (Exception)
+                    {
+                    }
+                }, null, 1000, 20 * 1000);
                 if (wasapiOut != null && wasapiOut.PlaybackState != PlaybackState.Playing)
                     wasapiOut.Play();
             }
@@ -118,7 +123,16 @@ namespace AudioStream.AudioServer
 
         public void Dispose()
         {
-            clientSocket?.Send(Encoding.UTF8.GetBytes("/Pause"));
+            timer?.Dispose();
+            timer = null;
+            try
+            {
+                clientSocket?.Send(Encoding.UTF8.GetBytes("/Pause"));
+            }
+            catch
+            {
+
+            }
             clientSocket?.Dispose();
             clientSocket = null;
             wasapiOut?.Dispose();
@@ -129,9 +143,9 @@ namespace AudioStream.AudioServer
         }
         private class NetworkStreamSource : IWaveSource
         {
-            private readonly NetworkStream _stream;
+            private readonly Stream _stream;
             private readonly WaveFormat _waveFormat;
-            public NetworkStreamSource(NetworkStream stream, WaveFormat waveFormat)
+            public NetworkStreamSource(Stream stream, WaveFormat waveFormat)
             {
                 _stream = stream;
                 _waveFormat = waveFormat;

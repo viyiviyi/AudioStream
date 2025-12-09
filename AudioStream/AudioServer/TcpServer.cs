@@ -99,6 +99,8 @@ namespace AudioStream
         {
             TcpAudioServer audioServer = null;
             NetworkStream clientStream = client.GetStream();
+            int _frameSize = 2048;
+            byte[] _header = new byte[8];
             try
             {
                 await Task.Run(() =>
@@ -106,8 +108,9 @@ namespace AudioStream
                     byte[] buffer = new byte[1024];
                     int bytesRead = 0;
                     var isRun = true;
+                    var lastTime = Environment.TickCount;
                     // 循环读取客户端发送的数据
-                    while (_isRunning && isRun && client.Connected && clientStream.CanRead)
+                    while (_isRunning && isRun && client.Connected)
                     {
                         try
                         {
@@ -127,14 +130,21 @@ namespace AudioStream
                         Console.WriteLine($"Received: {dataReceived}");
                         if (dataReceived.StartsWith("/Start"))
                         {
+                            lastTime = Environment.TickCount;
                             audioServer.Start();
                         }
                         if (dataReceived.StartsWith("/Pause"))
                         {
+                            lastTime = Environment.TickCount;
                             break;
+                        }
+                        if (dataReceived.StartsWith("/Ping"))
+                        {
+                            lastTime = Environment.TickCount;
                         }
                         if (dataReceived.StartsWith("/WaveFormat/"))
                         {
+                            lastTime = Environment.TickCount;
                             var id = dataReceived.Split('/')[2];
                             if (id.ToLower() == "default")
                             {
@@ -151,6 +161,11 @@ namespace AudioStream
                                         return;
                                     }
                                     if (!client.Connected)
+                                    {
+                                        isRun = false;
+                                        return;
+                                    }
+                                    if (Environment.TickCount - lastTime > 40000)
                                     {
                                         isRun = false;
                                         return;

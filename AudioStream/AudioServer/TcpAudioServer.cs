@@ -4,6 +4,7 @@ using CSCore.CoreAudioAPI;
 using CSCore.SoundIn;
 using System;
 using System.Net.Sockets;
+using System.Text.RegularExpressions;
 
 namespace AudioStream
 {
