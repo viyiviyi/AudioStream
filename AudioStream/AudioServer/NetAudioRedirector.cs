@@ -1,4 +1,5 @@
-﻿using CSCore;
+﻿using Common;
+using CSCore;
 using CSCore.CoreAudioAPI;
 using CSCore.SoundOut;
 using System;
@@ -30,12 +31,12 @@ namespace AudioStream.AudioServer
 
                 wasapiOut = new WasapiOut();
                 wasapiOut.Device = outputDevice;
-                wasapiOut.Latency = 10;
+                wasapiOut.Latency = 5;
                 stream = new NetworkStream(clientSocket);
                 clientSocket.NoDelay = false;
                 clientSocket.ReceiveBufferSize = 32 * 1024;
                 clientSocket.SendBufferSize = 32 * 1024;
-                clientSocket.ReceiveTimeout = 2;
+                //clientSocket.ReceiveTimeout = 50;
                 clientSocket.Send(Encoding.UTF8.GetBytes("/Start"));
                 soundInSource = new NetworkStreamSource(stream, waveFormat);
                 Console.WriteLine("WaveFormat: " + waveFormat.ToString());
@@ -46,16 +47,17 @@ namespace AudioStream.AudioServer
                     {
                         clientSocket.Send(Encoding.UTF8.GetBytes("/Ping"));
                     }
-                    catch (Exception)
+                    catch (Exception ex)
                     {
+                        Logger.Error($"心跳发送失败 {ex.Message}\n{ex.StackTrace}", ex);
                     }
                 }, null, 1000, 20 * 1000);
                 if (wasapiOut != null && wasapiOut.PlaybackState != PlaybackState.Playing)
                     wasapiOut.Play();
             }
-            catch (Exception e)
+            catch (Exception ex)
             {
-                Console.WriteLine(e.Message);
+                Logger.Error($"连接出错 {ex.Message}\n{ex.StackTrace}", ex);
             }
         }
 

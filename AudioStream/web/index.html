@@ -86,7 +86,6 @@
 
     <!-- 主内容区 -->
     <main class="flex-grow container mx-auto px-4 py-6">
-
         <!-- 播放列表 -->
         <div class="bg-white rounded-lg shadow-md overflow-hidden">
             <div class="px-4 py-3 bg-gray-50 border-b border-gray-200 flex justify-between items-center">
@@ -96,17 +95,14 @@
             </div>
 
             <div class="overflow-x-auto scrollbar-thin">
-                <table class="min-w-full divide-y divide-gray-200">
-                    <tbody id="player-list" class="bg-white divide-y divide-gray-200">
-                        <!-- 播放列表项将通过JavaScript动态添加 -->
-                        <tr class="animate-pulse-slow">
-                            <td colspan="5" class="px-6 py-10 text-center text-muted">
-                                <i class="fa fa-music text-3xl mb-2 block opacity-30"></i>
-                                <p>播放列表为空，请添加播放源</p>
-                            </td>
-                        </tr>
-                    </tbody>
-                </table>
+                <div id="player-list" class="min-w-full bg-white divide-y divide-gray-200">
+                    <div class="animate-pulse-slow">
+                        <div colspan="5" class="px-6 py-10 text-center text-muted">
+                            <i class="fa fa-music text-3xl mb-2 block opacity-30"></i>
+                            <p>播放列表为空，请添加播放源</p>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -163,7 +159,6 @@
             </div>
         </div>
     </main>
-
     <!-- 底部状态栏 -->
     <footer class="bg-gray-100 border-t border-gray-200 py-3">
         <div class="container mx-auto px-4 flex justify-between items-center text-sm text-muted">
@@ -343,18 +338,17 @@
 
         // 渲染播放列表
         async function renderPlayerList() {
-
             // 如果列表为空，显示提示信息
             if (players.length === 0) {
                 // 清空列表
                 playerList.innerHTML = '';
-                const emptyRow = document.createElement('tr');
+                const emptyRow = document.createElement('div');
                 emptyRow.className = 'animate-pulse-slow';
                 emptyRow.innerHTML = `
-          <td colspan="5" class="px-6 py-10 text-center text-muted">
+          <div colspan="5" class="px-6 py-10 text-center text-muted">
             <i class="fa fa-music text-3xl mb-2 block opacity-30"></i>
             <p>播放列表为空，请添加播放源</p>
-          </td>
+          </div>
         `;
                 playerList.appendChild(emptyRow);
                 return;
@@ -363,8 +357,8 @@
             // 为每个播放源创建列表项
             for (let index = 0; index < players.length; index++) {
                 const player = players[index];
-                const row = document.createElement('tr');
-                row.className = 'hover:bg-gray-50 transition-all-300';
+                const row = document.createElement('div');
+                row.className = 'hover:bg-gray-50 transition-all-300 flex';
                 row.dataset.id = player.id;
 
                 // 设置状态样式和文本
@@ -390,17 +384,23 @@
                 const controlBtnText = player.Play ? '停止' : '播放';
 
                 row.innerHTML = `
-          <td class="px-6 py-4">
+          <div class="px-4 py-4" style="width:220px">
             <div class="text-sm font-medium text-dark">${player.IP}</div>
             <div class="text-sm text-dark">${player.SourceDeviceName ? player.SourceDeviceName : '未知设备'}</div>
-          </td>
-          <td class="px-2 py-4 whitespace-nowrap">
+          </div>
+          <div class="px-2 py-4 whitespace-nowrap"  style="width:50px">
            <span class="ml-1">→</span>
-          </td>
-          <td class="px-6 py-4">
+          </div>
+          <div class="px-2 py-4"  style="width:220px">
             <div class="text-sm text-dark">${player.TargetDeiceName ? player.TargetDeiceName : '未知设备'}</div>
-          </td>
-          <td class="px-4 py-4 whitespace-nowrap text-right text-sm font-medium">
+          </div>
+          <div class="flex-1"></div>
+          <div class="px-0 py-4"  style="width:150px">
+            <label>
+              <input type="range" class="volume-set" min="0" max="100" value="${(player.Volume * 100).toFixed(2)}" />
+            </label>
+          </div>
+          <div class="px-2 py-4 whitespace-nowrap text-right text-sm font-medium" style="width:140px">
             <button class="control-btn px-3 py-1 rounded-md text-xs ${controlBtnClass} mr-2" 
                     data-id="${player.ID}" 
                     data-action="${player.Play ? 'stop' : 'play'}">
@@ -410,7 +410,7 @@
                     data-id="${player.ID}">
               <i class="fa fa-trash-o mr-1"></i> 删除
             </button>
-          </td>
+          </div>
         `;
                 rows.push(row)
             }
@@ -425,6 +425,31 @@
             document.querySelectorAll('.delete-btn').forEach(btn => {
                 btn.addEventListener('click', handleDeleteClick);
             });
+            document.querySelectorAll('.volume-set').forEach((btn, idx) => {
+                btn.addEventListener('input', function (e) { updateVolume(this.value, idx) });
+            });
+        }
+        let setVolumeTimer = 0;
+        function updateVolume(val, idx) {
+            clearTimeout(setVolumeTimer)
+            setVolumeTimer = setTimeout(async () => {
+                const playerId = players[idx].ID;
+                const volume = (val / 100).toFixed(3);
+                const response = await fetchWithTimeout(serverHost + '/api/volume?id=' + playerId + '&val=' + volume, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+                const res = await response.json();
+                if (res.Success) {
+                    // 更新状态
+                    loadPlayers();
+                } else {
+                    showError(res.Message || "出错");
+                }
+            }, 1000);
+
         }
         async function renderClientList(clients) {
 
@@ -465,7 +490,6 @@
             clientList.innerHTML = '';
             rows.forEach(row => clientList.appendChild(row))
         }
-
         // 设置事件监听器
         function setupEventListeners() {
             // IP地址输入变化时加载远程设备

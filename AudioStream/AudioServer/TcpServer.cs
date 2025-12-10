@@ -1,4 +1,5 @@
 ﻿using AudioStream.AudioServer.Model;
+using Common;
 using Common.Helper;
 using CSCore;
 using CSCore.XAudio2.X3DAudio;
@@ -56,7 +57,7 @@ namespace AudioStream
                         client.NoDelay = true;
                         client.ReceiveBufferSize = 32 * 1024;
                         client.SendBufferSize = 32 * 1024;
-                        client.SendTimeout = 2;
+                        //client.SendTimeout = 50;
                         OnMessage(client);
                         Console.WriteLine($"Client connected: {client.Client.RemoteEndPoint}");
                         lock (_clientsLock)
@@ -66,7 +67,7 @@ namespace AudioStream
                     }
                     catch (SocketException ex)
                     {
-                        Console.WriteLine($"SocketException in AcceptTcpClientAsync: {ex.Message}");
+                        Logger.Info($"SocketException in AcceptTcpClientAsync: {ex.Message}");
                         // Handle socket exceptions (e.g., server stopped)
                         if (ex.SocketErrorCode == SocketError.Interrupted)
                         {
@@ -76,19 +77,19 @@ namespace AudioStream
                         else
                         {
                             // Handle other socket errors as needed.  Consider logging.
-                            Console.WriteLine($"Unhandled SocketException: {ex}");
+                            Logger.Error($"Unhandled SocketException: {ex}", ex);
                         }
                     }
                     catch (Exception ex)
                     {
-                        Console.WriteLine($"Exception in AcceptTcpClientAsync: {ex}");
+                        Logger.Error($"Exception in AcceptTcpClientAsync: ", ex);
                     }
                     Thread.Sleep(1);
                 }
             }
             catch (SocketException ex)
             {
-                Console.WriteLine($"SocketException during server startup: {ex.Message}");
+                Logger.Error($"SocketException during server startup: {ex.Message}", ex);
             }
             finally
             {
@@ -112,6 +113,7 @@ namespace AudioStream
                     // 循环读取客户端发送的数据
                     while (_isRunning && isRun && client.Connected)
                     {
+                        lastTime = Environment.TickCount;
                         try
                         {
                             bytesRead = clientStream.Read(buffer, 0, buffer.Length);
@@ -138,10 +140,6 @@ namespace AudioStream
                             lastTime = Environment.TickCount;
                             break;
                         }
-                        if (dataReceived.StartsWith("/Ping"))
-                        {
-                            lastTime = Environment.TickCount;
-                        }
                         if (dataReceived.StartsWith("/WaveFormat/"))
                         {
                             lastTime = Environment.TickCount;
@@ -167,6 +165,7 @@ namespace AudioStream
                                     }
                                     if (Environment.TickCount - lastTime > 40000)
                                     {
+                                        Logger.Info("长时间无数据传输，连接关闭");
                                         isRun = false;
                                         return;
                                     }
@@ -178,8 +177,9 @@ namespace AudioStream
                                             clientStream.Flush();
                                         }
                                     }
-                                    catch (Exception)
+                                    catch (Exception ex)
                                     {
+                                        Logger.Error("发送数据出错，连接关闭",ex);
                                         isRun = false;
                                         return;
                                     }
@@ -238,7 +238,7 @@ namespace AudioStream
         {
             if (!_isRunning)
             {
-                Console.WriteLine("Server is not running.");
+                Logger.Info("Server is not running.");
                 return;
             }
             _isRunning = false;
@@ -247,7 +247,7 @@ namespace AudioStream
                 audioServer.Stop();
                 audioServer.Dispose();
             }
-            Console.WriteLine("Stopping server...");
+            Logger.Info("Stopping server...");
             // Stop listening for new connections
             try
             {
@@ -255,7 +255,7 @@ namespace AudioStream
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Error stopping listener: {ex.Message}");
+                Logger.Error("发送数据出错，连接关闭", ex);
             }
             // Close all client connections
             lock (_clientsLock)
@@ -268,12 +268,12 @@ namespace AudioStream
                     }
                     catch (Exception ex)
                     {
-                        Console.WriteLine($"Error closing client connection: {ex.Message}");
+                        Logger.Info($"Error closing client connection: {ex.Message}");
                     }
                 }
                 _clients.Clear();
             }
-            Console.WriteLine("Server stopped.");
+            Logger.Info("Server stopped.");
         }
 
         private void RemoveClient(TcpClient client)

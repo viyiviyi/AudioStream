@@ -34,7 +34,7 @@ namespace AudioStream
 
             wasapiOut = new WasapiOut();
             wasapiOut.Device = targetDevice;
-            wasapiOut.Latency = 1;
+            wasapiOut.Latency = 5;
             wasapiOut.Initialize(soundInSource.ToSampleSource().ToWaveSource());
             wasapiOut.Volume = 1;
             wasapiCapture.DataAvailable += (s, e) =>

@@ -64,11 +64,13 @@ namespace AudioStream.AudioServer
 
         public void SetVolume(float Volume)
         {
+            if (audioRedirector == null) return;
             audioRedirector.Volume = Volume;
         }
 
         public float GetVolume()
         {
+            if (audioRedirector == null) return 1;
             return audioRedirector.Volume;
         }
 

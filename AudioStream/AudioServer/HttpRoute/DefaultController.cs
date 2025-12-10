@@ -103,6 +103,25 @@ namespace AudioStream.AudioServer.HttpRoute
             return new HttpResult() { Result = InitServer.playerControl.Start(id) };
         }
 
+        [Route(HttpVerbs.Post, "/volume")]
+        public HttpResult Volume()
+        {
+            var ctx = HttpContext;
+            var id = ctx.Request.QueryString.Get("id");
+            var val = ctx.Request.QueryString.Get("val");
+            if (string.IsNullOrEmpty(id))
+            {
+                return new ResultError()
+                {
+                    Success = false,
+                    Code = 500,
+                    Message = "参数id不能为空"
+                };
+            }
+            InitServer.playerControl.SetVolume(id, float.Parse(val));
+            return new HttpResult() { Result = InitServer.playerControl.GetVolume(id) };
+        }
+
         [Route(HttpVerbs.Post, "/pause")]
         public HttpResult Pause()
         {

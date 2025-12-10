@@ -47,6 +47,14 @@ namespace AudioStream.AudioServer
 
         public List<PlayerInfo> GetPlayerInfoList()
         {
+            for (int i = 0; i < playerInfos.Count; i++)
+            {
+                var play = players.FirstOrDefault(a => a.ID == playerInfos[i].ID);
+                if (play != null)
+                {
+                    playerInfos[i].Volume = play.GetVolume();
+                }
+            }
             return playerInfos.Select(a=>a.Copy()).ToList();
         }
 
