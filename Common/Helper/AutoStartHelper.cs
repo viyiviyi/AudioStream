@@ -59,7 +59,7 @@ namespace Common.Helper
                 {
                     return false;
                 }
-                return runs.GetValue(keyName).ToString() == value;
+                return runs.GetValue(keyName)?.ToString() == value;
             }
             catch
             {
