@@ -46,7 +46,7 @@ namespace AudioStream.AudioServer
             {
                 if (Tools.IsPrivateIPAddress(playerInfo.IP))
                 {
-                    audioRedirector = new NetAudioRedirector(device, playerInfo.IP, playerInfo.SourceDeviceID);
+                    audioRedirector = new NetAudioRedirector(device, playerInfo.IP, playerInfo.SourceDeviceID, playerInfo.Volume);
                 }
                 else
                 {
@@ -57,7 +57,7 @@ namespace AudioStream.AudioServer
                     }
                     if (sourceDeviceId == deviceId) return;
                     var sourceDevice = AudioDeviceHelper.GetDeviceById(sourceDeviceId);
-                    audioRedirector = new LocalAudioRedirector(sourceDevice, device);
+                    audioRedirector = new LocalAudioRedirector(sourceDevice, device, playerInfo.Volume);
                 }
             });
         }
@@ -66,6 +66,7 @@ namespace AudioStream.AudioServer
         {
             if (audioRedirector == null) return;
             audioRedirector.Volume = Volume;
+            playerInfo.Volume = Volume;
         }
 
         public float GetVolume()

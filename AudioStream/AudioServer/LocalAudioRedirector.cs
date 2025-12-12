@@ -13,10 +13,25 @@ namespace AudioStream
         private WasapiCapture wasapiCapture = null;
         private WasapiOut wasapiOut = null;
 
-        public float Volume { get => wasapiOut != null ? wasapiOut.Volume : 1; set => wasapiOut.Volume = value; }
-
-        public LocalAudioRedirector(MMDevice sourceDevice, MMDevice targetDevice)
+        private float _Volume = 1;
+        public float Volume
         {
+            get => _Volume; set
+            {
+                if (wasapiOut == null)
+                {
+                    _Volume = value;
+                }
+                else
+                {
+                    wasapiOut.Volume = _Volume = value;
+                }
+            }
+        }
+
+        public LocalAudioRedirector(MMDevice sourceDevice, MMDevice targetDevice,float Volume)
+        {
+            this.Volume = Volume;
             if (sourceDevice.DeviceID == targetDevice.DeviceID) return;
             if (sourceDevice.DataFlow == DataFlow.Render)
             {
@@ -36,7 +51,7 @@ namespace AudioStream
             wasapiOut.Device = targetDevice;
             wasapiOut.Latency = 5;
             wasapiOut.Initialize(soundInSource.ToSampleSource().ToWaveSource());
-            wasapiOut.Volume = 1;
+            wasapiOut.Volume = this.Volume;
             wasapiCapture.DataAvailable += (s, e) =>
             {
                 if (wasapiOut.PlaybackState != PlaybackState.Playing)

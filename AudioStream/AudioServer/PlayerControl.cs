@@ -95,6 +95,7 @@ namespace AudioStream.AudioServer
         public void SetVolume(string guid, float Volume)
         {
             GetPlayer(guid)?.SetVolume(Volume);
+            SavePlayers();
         }
 
         public float GetVolume(string guid)

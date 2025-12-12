@@ -18,9 +18,24 @@ namespace AudioStream.AudioServer
         private WaveFormat waveFormat;
         private NetworkStreamSource soundInSource;
         private Timer timer;
-        public float Volume { get => wasapiOut != null ? wasapiOut.Volume : 1; set => wasapiOut.Volume = value; }
-        public NetAudioRedirector(MMDevice outputDevice, string address,string sourceDeviceID = null)
+        private float _Volume = 1;
+        public float Volume
         {
+            get => _Volume; set
+            {
+                if (wasapiOut == null)
+                {
+                    _Volume = value;
+                }
+                else
+                {
+                    wasapiOut.Volume = _Volume = value;
+                }
+            }
+        }
+        public NetAudioRedirector(MMDevice outputDevice, string address, string sourceDeviceID = null, float Volume = 1)
+        {
+            this.Volume = Volume;
             _address = address;
             try
             {
@@ -41,8 +56,9 @@ namespace AudioStream.AudioServer
                 soundInSource = new NetworkStreamSource(stream, waveFormat);
                 Console.WriteLine("WaveFormat: " + waveFormat.ToString());
                 wasapiOut.Initialize(soundInSource.ToSampleSource().ToWaveSource());
-                wasapiOut.Volume = 1;
-                timer = new Timer((t) => {
+                wasapiOut.Volume = this.Volume;
+                timer = new Timer((t) =>
+                {
                     try
                     {
                         clientSocket.Send(Encoding.UTF8.GetBytes("/Ping"));

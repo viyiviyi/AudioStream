@@ -397,7 +397,7 @@
           <div class="flex-1"></div>
           <div class="px-0 py-4"  style="width:150px">
             <label>
-              <input type="range" class="volume-set" min="0" max="100" value="${(player.Volume * 100).toFixed(2)}" />
+              <input type="range" class="volume-set" min="0" max="100" value="${(player.Volume * 50).toFixed(2)}" />
             </label>
           </div>
           <div class="px-2 py-4 whitespace-nowrap text-right text-sm font-medium" style="width:140px">
@@ -434,7 +434,7 @@
             clearTimeout(setVolumeTimer)
             setVolumeTimer = setTimeout(async () => {
                 const playerId = players[idx].ID;
-                const volume = (val / 100).toFixed(3);
+                const volume = (val / 50).toFixed(3);
                 const response = await fetchWithTimeout(serverHost + '/api/volume?id=' + playerId + '&val=' + volume, {
                     method: 'POST',
                     headers: {
