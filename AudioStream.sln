@@ -7,6 +7,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AudioStream", "AudioStream\
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Common", "Common\Common.csproj", "{97691851-4D4C-4497-B023-D3A73429B9D4}"
 EndProject
+Project("{54435603-DBB4-11D2-8724-00A0C9A8B90C}") = "AudioStreamSetup", "AudioStreamSetup\AudioStreamSetup.vdproj", "{D91D70CF-7616-2E74-D37A-EE01BCEBD672}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -21,6 +23,10 @@ Global
 		{97691851-4D4C-4497-B023-D3A73429B9D4}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{97691851-4D4C-4497-B023-D3A73429B9D4}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{97691851-4D4C-4497-B023-D3A73429B9D4}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D91D70CF-7616-2E74-D37A-EE01BCEBD672}.Debug|Any CPU.ActiveCfg = Debug
+		{D91D70CF-7616-2E74-D37A-EE01BCEBD672}.Debug|Any CPU.Build.0 = Debug
+		{D91D70CF-7616-2E74-D37A-EE01BCEBD672}.Release|Any CPU.ActiveCfg = Release
+		{D91D70CF-7616-2E74-D37A-EE01BCEBD672}.Release|Any CPU.Build.0 = Release
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
