@@ -1,9 +1,13 @@
-﻿using Common.Helper;
+﻿using AudioStream.Properties;
+using Common;
+using Common.Helper;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
+using System.IO;
 using System.Linq;
+using System.Net.NetworkInformation;
 using System.Security.Policy;
 using System.Threading;
 using System.Threading.Tasks;
@@ -20,23 +24,50 @@ namespace AudioStream
         [STAThread]
         static void Main()
         {
+            //Thread.Sleep(30 * 1000);
+            Environment.CurrentDirectory = Path.GetDirectoryName(Application.ExecutablePath);
+            Console.WriteLine(Environment.CurrentDirectory);
+            #region 保持只有一个进程
             Mutex instance = new Mutex(true, "AudioStream", out bool createdNew);
-            if (createdNew)
+            if (!createdNew)
             {
-                Application.EnableVisualStyles();
-                Application.SetCompatibleTextRenderingDefault(false);
-                CreateTrayIcon();
-                InitServer.Init();
-                AutoStartHelper.SetMeStart(true);
-                Application.Run();
-                instance.ReleaseMutex();
+                Process currentProcess = Process.GetCurrentProcess();
+                foreach (Process item in Process.GetProcessesByName(currentProcess.ProcessName))
+                {
+                    if (item.Id != currentProcess.Id && (item.StartTime - currentProcess.StartTime).TotalMilliseconds <= 0)
+                    {
+                        item.Kill();
+                        break;
+                    }
+                }
             }
-            else
+            Application.ApplicationExit += (s, d) =>
             {
-                InitServer.Stop();
-                System.Environment.Exit(0);
-                //Application.ExitThread();
-                //Application.Exit();
+                instance.ReleaseMutex();
+            };
+            #endregion
+            WaitForNetworkConnection();
+            Application.EnableVisualStyles();
+            Application.SetCompatibleTextRenderingDefault(false);
+            CreateTrayIcon();
+            InitServer.Init();
+            AutoStartHelper.SetMeStart(true);
+            Application.Run();
+        }
+        private static void WaitForNetworkConnection(int timeoutSeconds = 30)
+        {
+            DateTime startTime = DateTime.Now;
+
+            while (!NetworkInterface.GetIsNetworkAvailable())
+            {
+                if ((DateTime.Now - startTime).TotalSeconds > timeoutSeconds)
+                {
+                    // 超时处理
+                    Logger.Error("计算机网络状态异常，无法启动程序。");
+                    break;
+                }
+
+                Thread.Sleep(1000); // 等待1秒
             }
         }
         private static void CreateTrayIcon()

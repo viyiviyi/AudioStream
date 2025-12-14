@@ -12,14 +12,14 @@ namespace AudioStream.AudioServer
         private readonly List<PlayerInfo> playerInfos = new List<PlayerInfo>();
         private readonly List<Player> players = new List<Player>();
         private readonly Dictionary<Guid, Player> playerIdToMap = new Dictionary<Guid, Player>();
-
+        private readonly string ConfigFilePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "yiyiooo", "AudioStream", "players.json");
         public PlayerControl()
         {
-            if (File.Exists("players.json"))
+            if (File.Exists(ConfigFilePath))
             {
                 try
                 {
-                   var txt=  File.ReadAllText("players.json", System.Text.Encoding.UTF8);
+                   var txt=  File.ReadAllText(ConfigFilePath, System.Text.Encoding.UTF8);
                     var list = JsonConvert.DeserializeObject<List<PlayerInfo>>(txt);
                     if (list != null && list.Count > 0)
                     {
@@ -62,7 +62,11 @@ namespace AudioStream.AudioServer
         {
             try
             {
-                File.WriteAllText("players.json", JsonConvert.SerializeObject(playerInfos), System.Text.Encoding.UTF8);
+                if (!File.Exists(Path.GetDirectoryName(ConfigFilePath)))
+                {
+                    Directory.CreateDirectory(Path.GetDirectoryName(ConfigFilePath));
+                }
+                File.WriteAllText(ConfigFilePath, JsonConvert.SerializeObject(playerInfos), System.Text.Encoding.UTF8);
             }
             catch (Exception e)
             {

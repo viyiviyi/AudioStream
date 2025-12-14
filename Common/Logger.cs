@@ -26,7 +26,7 @@ namespace Common
 
             try
             {
-                logsDirPath = AppDomain.CurrentDomain.BaseDirectory + @"/Logs" + @"\" + Process.GetCurrentProcess().ProcessName;
+                logsDirPath = Environment.CurrentDirectory + @"/Logs" + @"\" + Process.GetCurrentProcess().ProcessName;
                 if (!Directory.Exists(logsDirPath))
                 {
                     Directory.CreateDirectory(logsDirPath);

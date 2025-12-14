@@ -16,7 +16,6 @@ namespace AudioStream
 {
     public partial class AudioStream : Form
     {
-        TcpServer tcpServer = new TcpServer();
         public AudioStream()
         {
             InitializeComponent();

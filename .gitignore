@@ -4,3 +4,5 @@ obj/
 packages/
 .vs/
 AudioStream/publish/
+AudioStreamSetup/Debug/
+AudioStreamSetup/Release/
