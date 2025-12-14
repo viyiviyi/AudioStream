@@ -74,9 +74,9 @@ namespace AudioStream
         {
             trayIcon = new NotifyIcon()
             {
-                Icon = Icon.ExtractAssociatedIcon("icon.ico"), // 设置图标，可以使用自己的图标文件
-                Text = "音频流转",           // 鼠标悬停时显示的文本
-                Visible = true                  // 必须设置为true才能显示
+                Icon = Icon.ExtractAssociatedIcon(Environment.CurrentDirectory + "/icon.ico"),
+                Text = "音频流转",
+                Visible = true
             };
 
             // 添加右键菜单
