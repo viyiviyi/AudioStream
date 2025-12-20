@@ -142,6 +142,12 @@
         "Entry"
         {
         "MsmKey" = "8:_UNDEFINED"
+        "OwnerKey" = "8:_B23D920B4C97E237BA8532012AD7871C"
+        "MsmSig" = "8:_UNDEFINED"
+        }
+        "Entry"
+        {
+        "MsmKey" = "8:_UNDEFINED"
         "OwnerKey" = "8:_0E6A06892BF97995254EC8A0F7BC9E56"
         "MsmSig" = "8:_UNDEFINED"
         }
@@ -149,12 +155,6 @@
         {
         "MsmKey" = "8:_UNDEFINED"
         "OwnerKey" = "8:_65B7F8F7532C8CD1F01F43EEB48B2252"
-        "MsmSig" = "8:_UNDEFINED"
-        }
-        "Entry"
-        {
-        "MsmKey" = "8:_UNDEFINED"
-        "OwnerKey" = "8:_B23D920B4C97E237BA8532012AD7871C"
         "MsmSig" = "8:_UNDEFINED"
         }
         "Entry"
@@ -722,7 +722,7 @@
             }
             "{3C67513D-01DD-4637-8A68-80971EB9504F}:_D712328B928E4DE7B0F20F58A9A20FA8"
             {
-            "DefaultLocation" = "8:[ProgramFilesFolder][Manufacturer]\\[ProductName]"
+            "DefaultLocation" = "8:[LocalAppDataFolder][Manufacturer]\\[ProductName]"
             "Name" = "8:#1925"
             "AlwaysCreate" = "11:FALSE"
             "Condition" = "8:"
@@ -749,13 +749,13 @@
         "Name" = "8:Microsoft Visual Studio"
         "ProductName" = "8:AudioStream"
         "ProductCode" = "8:{D5F90484-3FF1-4AA0-B3F2-1805E19160E3}"
-        "PackageCode" = "8:{B8B1EAC9-C8B1-4B84-AD7E-1474E5AFC839}"
+        "PackageCode" = "8:{C8AD1392-5F3D-420F-A233-F40D1FD65281}"
         "UpgradeCode" = "8:{F2248DB3-0DEC-46D1-85F6-375C77F44481}"
         "AspNetVersion" = "8:4.0.30319.0"
         "RestartWWWService" = "11:FALSE"
         "RemovePreviousVersions" = "11:TRUE"
         "DetectNewerInstalledVersion" = "11:FALSE"
-        "InstallAllUsers" = "11:TRUE"
+        "InstallAllUsers" = "11:FALSE"
         "ProductVersion" = "8:1.0.11"
         "Manufacturer" = "8:yiyiooo"
         "ARPHELPTELEPHONE" = "8:"
@@ -1282,7 +1282,7 @@
         }
         "ProjectOutput"
         {
-            "{5259A561-127C-4D43-A0A1-72F10C7B3BF8}:_27B19A3C60214AD7850D0FF4DFF029E3"
+            "{5259A561-127C-4D43-A0A1-72F10C7B3BF8}:_AA8A78D481404F0C97D27C7D6181BFBD"
             {
             "SourcePath" = "8:"
             "TargetName" = "8:"
