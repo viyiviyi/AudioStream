@@ -31,7 +31,7 @@ namespace AudioStream
 
         public LocalAudioRedirector(MMDevice sourceDevice, MMDevice targetDevice,float Volume)
         {
-            this.Volume = Volume;
+            _Volume = Volume;
             if (sourceDevice.DeviceID == targetDevice.DeviceID) return;
             if (sourceDevice.DataFlow == DataFlow.Render)
             {

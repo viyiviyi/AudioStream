@@ -26,7 +26,7 @@ namespace Common
 
             try
             {
-                logsDirPath = Environment.CurrentDirectory + @"/Logs" + @"\" + Process.GetCurrentProcess().ProcessName;
+                logsDirPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "yiyiooo", "AudioStream", "logs");
                 if (!Directory.Exists(logsDirPath))
                 {
                     Directory.CreateDirectory(logsDirPath);

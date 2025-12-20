@@ -78,7 +78,7 @@ namespace Common.Helper
         {
             try
             {
-                RegistryKey local = Registry.LocalMachine;
+                RegistryKey local = Registry.CurrentUser;
                 RegistryKey key = local.OpenSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Run", true);
                 if (key == null)
                 {

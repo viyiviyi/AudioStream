@@ -35,7 +35,7 @@ namespace AudioStream.AudioServer
         }
         public NetAudioRedirector(MMDevice outputDevice, string address, string sourceDeviceID = null, float Volume = 1)
         {
-            this.Volume = Volume;
+            _Volume = Volume;
             _address = address;
             try
             {

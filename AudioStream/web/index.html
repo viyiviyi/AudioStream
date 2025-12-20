@@ -385,7 +385,7 @@
 
                 row.innerHTML = `
           <div class="px-4 py-4" style="width:220px">
-            <div class="text-sm font-medium text-dark">${player.IP}</div>
+            <div class="text-sm font-medium text-dark">${player.IP ? ('<a target="_black" href="http://' + player.IP + ':12570">' + player.IP + '</a>') : ''}</div>
             <div class="text-sm text-dark">${player.SourceDeviceName ? player.SourceDeviceName : '未知设备'}</div>
           </div>
           <div class="px-2 py-4 whitespace-nowrap"  style="width:50px">
@@ -395,9 +395,9 @@
             <div class="text-sm text-dark">${player.TargetDeiceName ? player.TargetDeiceName : '未知设备'}</div>
           </div>
           <div class="flex-1"></div>
-          <div class="px-0 py-4"  style="width:150px">
+          <div class="px-0 py-4"  style="width:200px">
             <label>
-              <input type="range" class="volume-set" min="0" max="100" value="${(player.Volume * 50).toFixed(2)}" />
+              <input style="cursor: pointer" type="range" class="volume-set w-[100%]" min="0" max="100" value="${(player.Volume * 50).toFixed(2)}" />
             </label>
           </div>
           <div class="px-2 py-4 whitespace-nowrap text-right text-sm font-medium" style="width:140px">
@@ -481,7 +481,7 @@
            <span class="ml-1">→</span>
           </td>
           <td class="px-3 py-4">
-            <div class="text-sm text-dark">${client.ClientIp}</div>
+            <div class="text-sm text-dark">${client.ClientIp ? ('<a target="_black" href="http://' + client.ClientIp + ':12570">' + client.ClientIp + '</a>') : ''}</div>
           </td>
         `;
                 rows.push(row)
