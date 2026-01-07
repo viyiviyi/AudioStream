@@ -110,6 +110,7 @@ namespace AudioStream
                     int bytesRead = 0;
                     var isRun = true;
                     var lastTime = Environment.TickCount;
+                    var lastSendTime = Environment.TickCount;
                     // 循环读取客户端发送的数据
                     while (_isRunning && isRun && client.Connected)
                     {
@@ -138,6 +139,13 @@ namespace AudioStream
                         if (dataReceived.StartsWith("/Pause"))
                         {
                             lastTime = Environment.TickCount;
+                            if (Environment.TickCount - lastSendTime > 10000)
+                            {
+                                lastSendTime = Environment.TickCount;
+                                var r = Encoding.UTF8.GetBytes("​→_→");
+                                clientStream.Write(r, 0, r.Length);
+                                clientStream.Flush();
+                            }
                             break;
                         }
                         if (dataReceived.StartsWith("/WaveFormat/"))
@@ -163,7 +171,7 @@ namespace AudioStream
                                         isRun = false;
                                         return;
                                     }
-                                    if (Environment.TickCount - lastTime > 40000)
+                                    if (Environment.TickCount - lastTime > 20000)
                                     {
                                         Logger.Info("长时间无数据传输，连接关闭");
                                         isRun = false;
@@ -171,6 +179,7 @@ namespace AudioStream
                                     }
                                     try
                                     {
+                                        lastSendTime = Environment.TickCount;
                                         if (clientStream.CanWrite)
                                         {
                                             clientStream.Write(data, 0, len);

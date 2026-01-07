@@ -73,7 +73,7 @@ namespace AudioStream.AudioServer
                     {
                         Logger.Error($"心跳发送失败 {ex.Message}\n{ex.StackTrace}", ex);
                     }
-                }, null, 1000, 20 * 1000);
+                }, null, 1000, 10 * 1000);
                 if (wasapiOut != null && wasapiOut.PlaybackState != PlaybackState.Playing)
                     wasapiOut.Play();
                 Task.Run(() =>
@@ -81,16 +81,26 @@ namespace AudioStream.AudioServer
                     using (var _stream = new NetworkStream(clientSocket))
                     {
                         var buff = new byte[1024 * 1024];
+                        var lastTime = Environment.TickCount;
                         while (isRun)
                         {
                             try
                             {
                                 var len = _stream.Read(buff, 0, buff.Length);
-                                if (len <= 0)
+                                if (len <= 32)
                                 {
+                                    if (Environment.TickCount - lastTime > 20000)
+                                    {
+                                        clientSocket.Send(Encoding.UTF8.GetBytes("←_←"));
+                                    }
+                                    if (len > 0)
+                                    {
+                                        lastTime = Environment.TickCount;
+                                    }
                                     Thread.Sleep(1);
                                     continue;
                                 }
+                                lastTime = Environment.TickCount;
                                 var data = new byte[Math.Min(len, maxDelaySize)];
                                 Buffer.BlockCopy(buff, len - data.Length, data, 0, data.Length);
 
