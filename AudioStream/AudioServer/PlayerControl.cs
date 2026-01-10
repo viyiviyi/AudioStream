@@ -26,6 +26,9 @@ namespace AudioStream.AudioServer
                         foreach (var item in list)
                         {
                             playerInfos.Add(item);
+                        }
+                        foreach (var item in playerInfos)
+                        {
                             if (item.Play)
                             {
                                 Start(item);

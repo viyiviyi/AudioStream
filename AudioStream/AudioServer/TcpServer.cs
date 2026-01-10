@@ -100,7 +100,6 @@ namespace AudioStream
         {
             TcpAudioServer audioServer = null;
             NetworkStream clientStream = client.GetStream();
-            int _frameSize = 2048;
             byte[] _header = new byte[8];
             try
             {
@@ -182,8 +181,8 @@ namespace AudioStream
                                         lastSendTime = Environment.TickCount;
                                         if (clientStream.CanWrite)
                                         {
-                                            clientStream.Write(data, 0, len);
-                                            clientStream.Flush();
+                                            clientStream.WriteAsync(data, 0, len);
+                                            //clientStream.Flush();
                                         }
                                     }
                                     catch (Exception ex)

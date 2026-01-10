@@ -33,7 +33,13 @@ namespace AudioStream.AudioServer
                 }
                 else
                 {
-                    wasapiOut.Volume = _Volume = value;
+                    try
+                    {
+                        wasapiOut.Volume = _Volume = value;
+                    }
+                    catch (Exception)
+                    {
+                    }
                 }
             }
         }
@@ -104,37 +110,39 @@ namespace AudioStream.AudioServer
                                 var data = new byte[Math.Min(len, maxDelaySize)];
                                 Buffer.BlockCopy(buff, len - data.Length, data, 0, data.Length);
 
-                                // 检查当前缓冲区大小
-                                long currentSize = stream.Length;
-                                long currentPosition = stream.Position;
-                                //Console.WriteLine($"{currentSize} {currentPosition} {len} {data.Length} {maxDelaySize}");
-
-                                // 如果有延迟
-                                if (currentSize > maxDelaySize)
+                                lock (_stream)
                                 {
-                                    // 当有延迟时需要保留的最多数据量
-                                    long maxKeep = Math.Max(0, Math.Min(currentSize - currentPosition, maxDelaySize));
-                                    if (maxKeep > 0)
+                                    // 检查当前缓冲区大小
+                                    long currentSize = stream.Length;
+                                    long currentPosition = stream.Position;
+                                    //Console.WriteLine($"{currentSize} {currentPosition} {len} {data.Length} {maxDelaySize}");
+
+                                    // 如果有延迟
+                                    if (currentSize > maxDelaySize)
                                     {
-                                        var cache = new byte[maxKeep];
-                                        stream.Position = stream.Length - maxKeep;
-                                        stream.Read(cache, 0, cache.Length);
+                                        // 当有延迟时需要保留的最多数据量
+                                        long maxKeep = Math.Max(0, Math.Min(currentSize - currentPosition, maxDelaySize));
+                                        if (maxKeep > 0)
+                                        {
+                                            var cache = new byte[maxKeep];
+                                            stream.Position = stream.Length - maxKeep;
+                                            stream.Read(cache, 0, cache.Length);
+                                            stream.Position = 0;
+                                            stream.SetLength(0);
+                                            stream.Write(cache, 0, cache.Length);
+                                        }
                                         stream.Position = 0;
-                                        stream.SetLength(0);
-                                        stream.Write(cache, 0, cache.Length);
+                                        stream.SetLength(maxKeep);
                                     }
-                                    stream.Position = 0;
-                                    stream.SetLength(maxKeep);
+                                    var position = stream.Position;
+                                    stream.Position = stream.Length;
+                                    stream.Write(data, 0, data.Length);
+                                    stream.Position = position;
+                                    if (wasapiOut != null && wasapiOut.PlaybackState != PlaybackState.Playing && stream.Length > maxDelaySize / wasapiOut.Latency)
+                                    {
+                                        wasapiOut.Play();
+                                    }
                                 }
-                                var position = stream.Position;
-                                stream.Position = stream.Length;
-                                stream.Write(data, 0, data.Length);
-                                stream.Position = position;
-                                if (wasapiOut != null && wasapiOut.PlaybackState != PlaybackState.Playing && stream.Length > maxDelaySize / wasapiOut.Latency)
-                                {
-                                    wasapiOut.Play();
-                                }
-
                                 // 更合理的延迟
                                 Thread.Sleep(1); // 增加延迟，减少CPU使用率
                             }
@@ -255,7 +263,10 @@ namespace AudioStream.AudioServer
             {
                 try
                 {
-                    return _stream.Read(buffer, offset, count);
+                    lock (_stream)
+                    {
+                        return _stream.Read(buffer, offset, count);
+                    }
                 }
                 catch (Exception ex)
                 {
