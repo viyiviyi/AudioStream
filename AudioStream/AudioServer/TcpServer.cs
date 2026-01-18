@@ -45,6 +45,7 @@ namespace AudioStream
             {
                 _listener = new TcpListener(IPAddress.Any, _port);
                 _listener.Server.NoDelay = true;
+                _listener.Server.Ttl = 5;
                 _listener.Server.ReceiveBufferSize = 32 * 1024;
                 _listener.Server.SendBufferSize = 32 * 1024;
                 _listener.Start();
@@ -152,8 +153,7 @@ namespace AudioStream
                             if (Environment.TickCount - lastSendTime > 10000)
                             {
                                 lastSendTime = Environment.TickCount;
-                                var r = Encoding.UTF8.GetBytes("​→_→");
-                                clientStream.WriteAsync(r, 0, r.Length);
+                                clientStream.WriteAsync(new byte[] { 0, 0, 0, 0 }, 0, 4);
                                 //clientStream.Flush();
                                 Console.WriteLine($"​→_→");
                             }
@@ -169,8 +169,17 @@ namespace AudioStream
                             var device = AudioDeviceHelper.GetDeviceById(id);
                             if (device != null)
                             {
-                                audioServer = new TcpAudioServer(device, async (data, len) =>
+                                var count = 0;
+                                var lastR = Environment.TickCount;
+                                audioServer = new TcpAudioServer(device, (data, len) =>
                                 {
+                                    count++;
+                                    if (Environment.TickCount - lastR >= 1000)
+                                    {
+                                        Console.WriteLine("刷新次数 " + count);
+                                        count = 0;
+                                        lastR = Environment.TickCount;
+                                    }
                                     if (!_isRunning)
                                     {
                                         isRun = false;
@@ -192,7 +201,7 @@ namespace AudioStream
                                         lastSendTime = Environment.TickCount;
                                         if (clientStream.CanWrite)
                                         {
-                                            await clientStream.WriteAsync(data, 0, len);
+                                            clientStream.Write(data, 0, len);
                                             //clientStream.Flush();
                                         }
                                     }
@@ -212,7 +221,25 @@ namespace AudioStream
                                     writer.Write(extensibleFormat.SampleRate);
                                     writer.Write(extensibleFormat.BitsPerSample);
                                     writer.Write(extensibleFormat.Channels);
-                                    writer.Write((int)extensibleFormat.WaveFormatTag);
+                                    if(extensibleFormat is WaveFormatExtensible)
+                                    {
+                                        var _w = extensibleFormat as WaveFormatExtensible;
+                                        if (_w.SubFormat == AudioSubTypes.Pcm)
+                                        {
+                                            writer.Write((int)AudioEncoding.Pcm);
+                                        }else if(_w.SubFormat == AudioSubTypes.IeeeFloat)
+                                        {
+                                            writer.Write((int)AudioEncoding.IeeeFloat);
+                                        }
+                                        else
+                                        {
+                                            writer.Write(Encoding.ASCII.GetBytes(_w.SubFormat.ToString()));
+                                        }
+                                    }
+                                    else
+                                    {
+                                        writer.Write((int)extensibleFormat.WaveFormatTag);
+                                    }
                                     clientStream.Write(stream.ToArray(), 0, (int)stream.Length);
                                     clientStream.Flush();
                                 }

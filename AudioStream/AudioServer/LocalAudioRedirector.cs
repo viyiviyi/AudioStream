@@ -34,21 +34,19 @@ namespace AudioStream
         {
             _Volume = Volume;
             if (sourceDevice.DeviceID == targetDevice.DeviceID) return;
-            WaveFormat waveFormat = new WaveFormat(48000, 24, 2);
             if (sourceDevice.DataFlow == DataFlow.Render)
             {
                 // 输出设备 扬声器、耳机
-                wasapiCapture = new WasapiLoopbackCapture(latency: 1, waveFormat, ThreadPriority.AboveNormal);
+                wasapiCapture = new WasapiLoopbackCapture(latency: 1);
             }
             else
             {
                 // 输入设备 麦克风
-                wasapiCapture = new WasapiCapture(false, AudioClientShareMode.Shared, latency: 1, waveFormat);
+                wasapiCapture = new WasapiCapture(false, AudioClientShareMode.Shared, latency: 1);
             }
             wasapiCapture.Device = sourceDevice;
             wasapiCapture.Initialize();
             var soundInSource = new SoundInSource(wasapiCapture);
-
             wasapiOut = new WasapiOut();
             wasapiOut.Device = targetDevice;
             wasapiOut.Latency = 1;

@@ -88,10 +88,20 @@ namespace AudioStream.AudioServer
                     {
                         var buff = new byte[1024 * 1024];
                         var lastTime = Environment.TickCount;
+                        var count = 0;
+                        var lastR = Environment.TickCount;
                         while (isRun)
                         {
+                            // 不要等待，Windows 系统时钟分辨率大概是15.6ms，会导致最小间隔实际是15.6ms
                             try
                             {
+                                count++;
+                                if (Environment.TickCount - lastR >= 1000)
+                                {
+                                    Console.WriteLine("获取数据次数 " + count);
+                                    count = 0;
+                                    lastR = Environment.TickCount;
+                                }
                                 var len = _stream.Read(buff, 0, buff.Length);
                                 if (len <= 32)
                                 {
@@ -103,7 +113,6 @@ namespace AudioStream.AudioServer
                                     {
                                         lastTime = Environment.TickCount;
                                     }
-                                    Thread.Sleep(1);
                                     continue;
                                 }
                                 lastTime = Environment.TickCount;
@@ -138,13 +147,11 @@ namespace AudioStream.AudioServer
                                     stream.Position = stream.Length;
                                     stream.Write(data, 0, data.Length);
                                     stream.Position = position;
-                                    if (wasapiOut != null && wasapiOut.PlaybackState != PlaybackState.Playing && stream.Length > maxDelaySize / bufferTime)
+                                    if (wasapiOut != null && wasapiOut.PlaybackState != PlaybackState.Playing)
                                     {
                                         wasapiOut.Play();
                                     }
                                 }
-                                // 更合理的延迟
-                                Thread.Sleep(1); // 增加延迟，减少CPU使用率
                             }
                             catch (Exception e)
                             {
@@ -254,18 +261,23 @@ namespace AudioStream.AudioServer
                 _waveFormat = waveFormat;
             }
             public WaveFormat WaveFormat => _waveFormat;
-            public long Length => -1;
+            public long Length => _stream.Length;
             public long Position { get=> _stream.Position; set=> _stream.Position=value; }
 
-            public bool CanSeek => false;
-
+            public bool CanSeek => _stream.CanSeek;
+            byte[] zeroArray = new byte[1024*10];
             public int Read(byte[] buffer, int offset, int count)
             {
                 try
                 {
                     lock (_stream)
                     {
-                        return _stream.Read(buffer, offset, count);
+                        var len = _stream.Read(buffer, offset, count);
+                        //if (len == 0)
+                        //{
+                        //    Buffer.BlockCopy(zeroArray,0,buffer,0,)
+                        //}
+                        return len;
                     }
                 }
                 catch (Exception ex)
