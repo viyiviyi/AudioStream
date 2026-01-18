@@ -25,6 +25,7 @@ namespace AudioStream
         private readonly List<TcpAudioServer> tcpAudioServers = new List<TcpAudioServer>();
         private readonly List<ClientItem> clientItems = new List<ClientItem>();
         private readonly object _clientsLock = new object(); // For thread safety when accessing _clients
+        // tcp服务状态
         private bool _isRunning = false;
         public TcpServer()
         {
@@ -84,11 +85,12 @@ namespace AudioStream
                     {
                         Logger.Error($"Exception in AcceptTcpClientAsync: ", ex);
                     }
-                    Thread.Sleep(1);
+                    Thread.Sleep(10);
                 }
             }
             catch (SocketException ex)
             {
+                Console.WriteLine($"SocketException during server startup: {ex.Message}");
                 Logger.Error($"SocketException during server startup: {ex.Message}", ex);
             }
             finally
@@ -100,6 +102,7 @@ namespace AudioStream
         {
             TcpAudioServer audioServer = null;
             NetworkStream clientStream = client.GetStream();
+            client.ReceiveTimeout = 1000 * 30;
             byte[] _header = new byte[8];
             try
             {
@@ -135,17 +138,25 @@ namespace AudioStream
                             lastTime = Environment.TickCount;
                             audioServer.Start();
                         }
+                        // 暂停
                         if (dataReceived.StartsWith("/Pause"))
+                        {
+                            lastTime = Environment.TickCount;
+                            isRun = false;
+                            return;
+                        }
+                        // 心跳
+                        if (dataReceived.StartsWith("/Ping"))
                         {
                             lastTime = Environment.TickCount;
                             if (Environment.TickCount - lastSendTime > 10000)
                             {
                                 lastSendTime = Environment.TickCount;
                                 var r = Encoding.UTF8.GetBytes("​→_→");
-                                clientStream.Write(r, 0, r.Length);
-                                clientStream.Flush();
+                                clientStream.WriteAsync(r, 0, r.Length);
+                                //clientStream.Flush();
+                                Console.WriteLine($"​→_→");
                             }
-                            break;
                         }
                         if (dataReceived.StartsWith("/WaveFormat/"))
                         {
@@ -158,7 +169,7 @@ namespace AudioStream
                             var device = AudioDeviceHelper.GetDeviceById(id);
                             if (device != null)
                             {
-                                audioServer = new TcpAudioServer(device, (data, len) =>
+                                audioServer = new TcpAudioServer(device, async (data, len) =>
                                 {
                                     if (!_isRunning)
                                     {
@@ -181,7 +192,7 @@ namespace AudioStream
                                         lastSendTime = Environment.TickCount;
                                         if (clientStream.CanWrite)
                                         {
-                                            clientStream.WriteAsync(data, 0, len);
+                                            await clientStream.WriteAsync(data, 0, len);
                                             //clientStream.Flush();
                                         }
                                     }
@@ -201,21 +212,7 @@ namespace AudioStream
                                     writer.Write(extensibleFormat.SampleRate);
                                     writer.Write(extensibleFormat.BitsPerSample);
                                     writer.Write(extensibleFormat.Channels);
-                                    if (extensibleFormat.SubFormat == AudioSubTypes.Pcm)
-                                    {
-                                        Console.WriteLine("音频格式: PCM");
-                                        writer.Write((int)AudioEncoding.Pcm);
-                                    }
-                                    else if (extensibleFormat.SubFormat == AudioSubTypes.IeeeFloat)
-                                    {
-                                        Console.WriteLine("音频格式: IEEE Float");
-                                        writer.Write((int)AudioEncoding.IeeeFloat);
-                                    }
-                                    else
-                                    {
-                                        Console.WriteLine("音频格式: 未知");
-                                        writer.Write(Encoding.ASCII.GetBytes(extensibleFormat.SubFormat.ToString()));
-                                    }
+                                    writer.Write((int)extensibleFormat.WaveFormatTag);
                                     clientStream.Write(stream.ToArray(), 0, (int)stream.Length);
                                     clientStream.Flush();
                                 }

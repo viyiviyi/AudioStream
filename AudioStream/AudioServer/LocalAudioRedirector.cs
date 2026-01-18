@@ -5,6 +5,7 @@ using CSCore.SoundIn;
 using CSCore.SoundOut;
 using CSCore.Streams;
 using System;
+using System.Threading;
 
 namespace AudioStream
 {
@@ -33,15 +34,16 @@ namespace AudioStream
         {
             _Volume = Volume;
             if (sourceDevice.DeviceID == targetDevice.DeviceID) return;
+            WaveFormat waveFormat = new WaveFormat(48000, 24, 2);
             if (sourceDevice.DataFlow == DataFlow.Render)
             {
                 // 输出设备 扬声器、耳机
-                wasapiCapture = new WasapiLoopbackCapture();
+                wasapiCapture = new WasapiLoopbackCapture(latency: 5, waveFormat, ThreadPriority.AboveNormal);
             }
             else
             {
                 // 输入设备 麦克风
-                wasapiCapture = new WasapiCapture();
+                wasapiCapture = new WasapiCapture(false, AudioClientShareMode.Shared, latency: 5, waveFormat);
             }
             wasapiCapture.Device = sourceDevice;
             wasapiCapture.Initialize();
@@ -49,7 +51,7 @@ namespace AudioStream
 
             wasapiOut = new WasapiOut();
             wasapiOut.Device = targetDevice;
-            wasapiOut.Latency = 5;
+            wasapiOut.Latency = 10;
             wasapiOut.Initialize(soundInSource.ToSampleSource().ToWaveSource());
             wasapiOut.Volume = this.Volume;
             wasapiCapture.DataAvailable += (s, e) =>

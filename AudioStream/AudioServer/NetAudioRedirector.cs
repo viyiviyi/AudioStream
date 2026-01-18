@@ -57,12 +57,11 @@ namespace AudioStream.AudioServer
 
                 wasapiOut = new WasapiOut();
                 wasapiOut.Device = outputDevice;
-                wasapiOut.Latency = 5;
-                maxDelaySize = (waveFormat.BytesPerSecond / 100) * wasapiOut.Latency;
+                wasapiOut.Latency = 20;
+                maxDelaySize = (waveFormat.BytesPerSecond / 1000) * wasapiOut.Latency;
                 stream = new MemoryStream();
                 clientSocket.NoDelay = false;
                 clientSocket.ReceiveBufferSize = 32 * 1024;
-                clientSocket.SendBufferSize = 32 * 1024;
                 //clientSocket.ReceiveTimeout = 50;
                 clientSocket.Send(Encoding.UTF8.GetBytes("/Start"));
                 soundInSource = new NetworkStreamSource(stream, waveFormat);
@@ -138,7 +137,7 @@ namespace AudioStream.AudioServer
                                     stream.Position = stream.Length;
                                     stream.Write(data, 0, data.Length);
                                     stream.Position = position;
-                                    if (wasapiOut != null && wasapiOut.PlaybackState != PlaybackState.Playing && stream.Length > maxDelaySize / wasapiOut.Latency)
+                                    if (wasapiOut != null && wasapiOut.PlaybackState != PlaybackState.Playing && stream.Length > maxDelaySize / wasapiOut.Latency * 5)
                                     {
                                         wasapiOut.Play();
                                     }
@@ -254,10 +253,10 @@ namespace AudioStream.AudioServer
                 _waveFormat = waveFormat;
             }
             public WaveFormat WaveFormat => _waveFormat;
-            public long Length => _stream.Length;
+            public long Length => -1;
             public long Position { get=> _stream.Position; set=> _stream.Position=value; }
 
-            public bool CanSeek => _stream.CanSeek;
+            public bool CanSeek => false;
 
             public int Read(byte[] buffer, int offset, int count)
             {
