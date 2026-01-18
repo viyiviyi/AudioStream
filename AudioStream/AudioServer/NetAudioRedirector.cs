@@ -20,6 +20,7 @@ namespace AudioStream.AudioServer
         private WaveFormat waveFormat;
         private NetworkStreamSource soundInSource;
         private int maxDelaySize = 0;
+        private int bufferTime = 20; // 缓冲毫秒数
         private Timer timer;
         private float _Volume = 1;
         private bool isRun = false;
@@ -58,7 +59,7 @@ namespace AudioStream.AudioServer
                 wasapiOut = new WasapiOut();
                 wasapiOut.Device = outputDevice;
                 wasapiOut.Latency = 1;
-                maxDelaySize = (waveFormat.BytesPerSecond / 1000) * 20; // 抓取那边最少抓取间隔是15ms，缓冲量不能小于15ms，否则卡顿严重
+                maxDelaySize = (waveFormat.BytesPerSecond / 1000) * bufferTime; // 抓取那边最少抓取间隔是15ms，缓冲量不能小于15ms，否则卡顿严重
                 stream = new MemoryStream();
                 clientSocket.NoDelay = false;
                 clientSocket.ReceiveBufferSize = 32 * 1024;
@@ -137,7 +138,7 @@ namespace AudioStream.AudioServer
                                     stream.Position = stream.Length;
                                     stream.Write(data, 0, data.Length);
                                     stream.Position = position;
-                                    if (wasapiOut != null && wasapiOut.PlaybackState != PlaybackState.Playing && stream.Length > maxDelaySize / wasapiOut.Latency * 5)
+                                    if (wasapiOut != null && wasapiOut.PlaybackState != PlaybackState.Playing && stream.Length > maxDelaySize / bufferTime)
                                     {
                                         wasapiOut.Play();
                                     }
