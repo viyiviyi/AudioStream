@@ -27,7 +27,7 @@
     <ProductName>音频流转</ProductName>
     <PublisherName>yiyiooo</PublisherName>
     <OpenBrowserOnPublish>false</OpenBrowserOnPublish>
-    <ApplicationRevision>30</ApplicationRevision>
+    <ApplicationRevision>36</ApplicationRevision>
     <ApplicationVersion>1.0.0.%2a</ApplicationVersion>
     <UseApplicationTrust>false</UseApplicationTrust>
     <PublishWizardCompleted>true</PublishWizardCompleted>
@@ -114,6 +114,7 @@
     <Compile Include="AudioServer\IPlayerRedirector.cs" />
     <Compile Include="AudioServer\Model\ClientItem.cs" />
     <Compile Include="AudioServer\Model\DeviceInfo.cs" />
+    <Compile Include="AudioServer\Model\LimitedBuffer.cs" />
     <Compile Include="AudioServer\Model\PlayerInfo.cs" />
     <Compile Include="AudioServer\NetAudioRedirector.cs" />
     <Compile Include="AudioServer\Player.cs" />

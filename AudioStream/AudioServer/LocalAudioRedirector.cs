@@ -4,8 +4,6 @@ using CSCore.CoreAudioAPI;
 using CSCore.SoundIn;
 using CSCore.SoundOut;
 using CSCore.Streams;
-using System;
-using System.Threading;
 
 namespace AudioStream
 {
@@ -37,12 +35,12 @@ namespace AudioStream
             if (sourceDevice.DataFlow == DataFlow.Render)
             {
                 // 输出设备 扬声器、耳机
-                wasapiCapture = new WasapiLoopbackCapture(latency: 1);
+                wasapiCapture = new WasapiLoopbackCapture(latency: 50);
             }
             else
             {
                 // 输入设备 麦克风
-                wasapiCapture = new WasapiCapture(false, AudioClientShareMode.Shared, latency: 1);
+                wasapiCapture = new WasapiCapture(false, AudioClientShareMode.Shared, latency: 50);
             }
             wasapiCapture.Device = sourceDevice;
             wasapiCapture.Initialize();

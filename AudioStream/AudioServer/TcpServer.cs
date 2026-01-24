@@ -47,7 +47,7 @@ namespace AudioStream
                 _listener.Server.NoDelay = true;
                 _listener.Server.Ttl = 5;
                 _listener.Server.ReceiveBufferSize = 32 * 1024;
-                _listener.Server.SendBufferSize = 32 * 1024;
+                _listener.Server.SendBufferSize = 512 * 1024;
                 _listener.Start();
                 _isRunning = true;
                 Console.WriteLine($"Server started on port {_port}.");
@@ -201,7 +201,7 @@ namespace AudioStream
                                         lastSendTime = Environment.TickCount;
                                         if (clientStream.CanWrite)
                                         {
-                                            clientStream.Write(data, 0, len);
+                                            clientStream.WriteAsync(data, 0, len);
                                             //clientStream.Flush();
                                         }
                                     }

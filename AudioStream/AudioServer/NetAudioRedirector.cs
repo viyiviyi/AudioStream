@@ -1,4 +1,5 @@
-﻿using Common;
+﻿using AudioStream.AudioServer.Model;
+using Common;
 using CSCore;
 using CSCore.CoreAudioAPI;
 using CSCore.SoundOut;
@@ -8,7 +9,6 @@ using System.Net.Sockets;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
-using System.Web.Hosting;
 namespace AudioStream.AudioServer
 {
     internal class NetAudioRedirector : IPlayerRedirector
@@ -16,11 +16,11 @@ namespace AudioStream.AudioServer
         private string _address;
         private WasapiOut wasapiOut;
         private Socket clientSocket;
-        private Stream stream;
+        private LimitedBuffer audioBuffer;
         private WaveFormat waveFormat;
         private NetworkStreamSource soundInSource;
         private int maxDelaySize = 0;
-        private int bufferTime = 20; // 缓冲毫秒数
+        private int bufferTime = 64; // 缓冲毫秒数
         private Timer timer;
         private float _Volume = 1;
         private bool isRun = false;
@@ -60,12 +60,12 @@ namespace AudioStream.AudioServer
                 wasapiOut.Device = outputDevice;
                 wasapiOut.Latency = 1;
                 maxDelaySize = (waveFormat.BytesPerSecond / 1000) * bufferTime; // 抓取那边最少抓取间隔是15ms，缓冲量不能小于15ms，否则卡顿严重
-                stream = new MemoryStream();
+                audioBuffer = new LimitedBuffer(maxDelaySize);
                 clientSocket.NoDelay = false;
-                clientSocket.ReceiveBufferSize = 32 * 1024;
+                clientSocket.ReceiveBufferSize = 1024 * 1024;
                 //clientSocket.ReceiveTimeout = 50;
                 clientSocket.Send(Encoding.UTF8.GetBytes("/Start"));
-                soundInSource = new NetworkStreamSource(stream, waveFormat);
+                soundInSource = new NetworkStreamSource(audioBuffer, waveFormat);
                 Console.WriteLine("WaveFormat: " + waveFormat.ToString());
                 wasapiOut.Initialize(soundInSource.ToSampleSource().ToWaveSource());
                 wasapiOut.Volume = this.Volume;
@@ -80,9 +80,8 @@ namespace AudioStream.AudioServer
                         Logger.Error($"心跳发送失败 {ex.Message}\n{ex.StackTrace}", ex);
                     }
                 }, null, 1000, 10 * 1000);
-                if (wasapiOut != null && wasapiOut.PlaybackState != PlaybackState.Playing)
-                    wasapiOut.Play();
-                Task.Run(() =>
+
+                Task.Run(async () =>
                 {
                     using (var _stream = new NetworkStream(clientSocket))
                     {
@@ -102,13 +101,9 @@ namespace AudioStream.AudioServer
                                     count = 0;
                                     lastR = Environment.TickCount;
                                 }
-                                var len = _stream.Read(buff, 0, buff.Length);
+                                var len = await _stream.ReadAsync(buff, 0, buff.Length);
                                 if (len <= 32)
                                 {
-                                    if (Environment.TickCount - lastTime > 20000)
-                                    {
-                                        clientSocket.Send(Encoding.UTF8.GetBytes("←_←"));
-                                    }
                                     if (len > 0)
                                     {
                                         lastTime = Environment.TickCount;
@@ -116,41 +111,10 @@ namespace AudioStream.AudioServer
                                     continue;
                                 }
                                 lastTime = Environment.TickCount;
-                                var data = new byte[Math.Min(len, maxDelaySize)];
-                                Buffer.BlockCopy(buff, len - data.Length, data, 0, data.Length);
-
-                                lock (_stream)
+                                audioBuffer.WriteToCircularBuffer(buff, 0, len);
+                                if (wasapiOut != null && wasapiOut.PlaybackState != PlaybackState.Playing && audioBuffer.AvailableData > 0)
                                 {
-                                    // 检查当前缓冲区大小
-                                    long currentSize = stream.Length;
-                                    long currentPosition = stream.Position;
-                                    //Console.WriteLine($"{currentSize} {currentPosition} {len} {data.Length} {maxDelaySize}");
-
-                                    // 如果有延迟
-                                    if (currentSize > maxDelaySize)
-                                    {
-                                        // 当有延迟时需要保留的最多数据量
-                                        long maxKeep = Math.Max(0, Math.Min(currentSize - currentPosition, maxDelaySize));
-                                        if (maxKeep > 0)
-                                        {
-                                            var cache = new byte[maxKeep];
-                                            stream.Position = stream.Length - maxKeep;
-                                            stream.Read(cache, 0, cache.Length);
-                                            stream.Position = 0;
-                                            stream.SetLength(0);
-                                            stream.Write(cache, 0, cache.Length);
-                                        }
-                                        stream.Position = 0;
-                                        stream.SetLength(maxKeep);
-                                    }
-                                    var position = stream.Position;
-                                    stream.Position = stream.Length;
-                                    stream.Write(data, 0, data.Length);
-                                    stream.Position = position;
-                                    if (wasapiOut != null && wasapiOut.PlaybackState != PlaybackState.Playing)
-                                    {
-                                        wasapiOut.Play();
-                                    }
+                                    wasapiOut.Play();
                                 }
                             }
                             catch (Exception e)
@@ -253,32 +217,23 @@ namespace AudioStream.AudioServer
         }
         private class NetworkStreamSource : IWaveSource
         {
-            private readonly Stream _stream;
+            private readonly LimitedBuffer _stream;
             private readonly WaveFormat _waveFormat;
-            public NetworkStreamSource(Stream stream, WaveFormat waveFormat)
+            public NetworkStreamSource(LimitedBuffer stream, WaveFormat waveFormat)
             {
                 _stream = stream;
                 _waveFormat = waveFormat;
             }
             public WaveFormat WaveFormat => _waveFormat;
-            public long Length => _stream.Length;
-            public long Position { get=> _stream.Position; set=> _stream.Position=value; }
+            public long Length => -1;
+            public long Position { get; set; }
 
-            public bool CanSeek => _stream.CanSeek;
-            byte[] zeroArray = new byte[1024*10];
+            public bool CanSeek => false;
             public int Read(byte[] buffer, int offset, int count)
             {
                 try
                 {
-                    lock (_stream)
-                    {
-                        var len = _stream.Read(buffer, offset, count);
-                        //if (len == 0)
-                        //{
-                        //    Buffer.BlockCopy(zeroArray,0,buffer,0,)
-                        //}
-                        return len;
-                    }
+                    return _stream.Read(buffer, offset, count);
                 }
                 catch (Exception ex)
                 {
@@ -287,7 +242,7 @@ namespace AudioStream.AudioServer
             }
             public void Dispose()
             {
-                _stream.Dispose();
+                //_stream.Dispose();
                 // Do not dispose the stream here, as it's managed by the main class.
             }
         }
