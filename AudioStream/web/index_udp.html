@@ -1,0 +1,586 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>音频流转配置 - UDP版本</title>
+    <!-- Tailwind CSS v3 -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#1a365d',
+                        secondary: '#f7fafc',
+                        success: '#48bb78',
+                        danger: '#f56565',
+                        warning: '#ecc94b',
+                        dark: '#2d3748',
+                        muted: '#718096',
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'system-ui', 'sans-serif'],
+                    },
+                    animation: {
+                        'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style type="text/tailwindcss">
+        @layer utilities {
+      .transition-all-300 {
+        transition: all 0.3s ease;
+      }
+      .bg-gradient-primary {
+        background: linear-gradient(135deg, #1a365d 0%, #2c5282 100%);
+      }
+      .text-shadow {
+        text-shadow: 0 2px 4px rgba(0,0,0,0.1);
+      }
+      .scrollbar-thin {
+        scrollbar-width: thin;
+      }
+      .scrollbar-thin::-webkit-scrollbar {
+        width: 6px;
+      }
+      .scrollbar-thin::-webkit-scrollbar-track {
+        background: #f1f1f1;
+        border-radius: 3px;
+      }
+      .scrollbar-thin::-webkit-scrollbar-thumb {
+        background: #c1c1c1;
+        border-radius: 3px;
+      }
+      .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+        background: #a8a8a8;
+      }
+    }
+    </style>
+</head>
+
+<body class="bg-gray-50 font-sans">
+    <div class="min-h-screen">
+        <!-- Header -->
+        <header class="bg-gradient-primary text-white shadow-lg">
+            <div class="container mx-auto px-4 py-6">
+                <div class="flex flex-col md:flex-row justify-between items-center">
+                    <div class="mb-4 md:mb-0">
+                        <h1 class="text-3xl font-bold text-shadow">音频流转配置</h1>
+                        <p class="text-blue-200 mt-2">UDP版本 - 更低延迟的音频传输</p>
+                    </div>
+                    <div class="flex items-center space-x-4">
+                        <div class="bg-blue-800/30 px-4 py-2 rounded-lg">
+                            <span class="text-sm">状态: </span>
+                            <span id="serverStatus" class="font-semibold text-green-300">运行中</span>
+                        </div>
+                        <button onclick="refreshAll()" 
+                                class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-all-300 flex items-center">
+                            <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                                      d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                            </svg>
+                            刷新
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="container mx-auto px-4 py-8">
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                <!-- Left Column: Add Player Form -->
+                <div class="lg:col-span-1">
+                    <div class="bg-white rounded-xl shadow-lg p-6 mb-8">
+                        <h2 class="text-2xl font-bold text-dark mb-6 pb-3 border-b">添加音频流转</h2>
+                        
+                        <div class="space-y-6">
+                            <!-- IP Address -->
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">
+                                    IP地址 (留空表示本地)
+                                </label>
+                                <input type="text" id="ipAddress" 
+                                       class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all-300"
+                                       placeholder="例如: 192.168.1.100">
+                                <p class="text-sm text-muted mt-2">输入远程电脑的IP地址，留空表示流转本地音频</p>
+                            </div>
+
+                            <!-- Source Device -->
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">
+                                    来源音频设备
+                                </label>
+                                <select id="sourceDevice" 
+                                        class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all-300">
+                                    <option value="">加载中...</option>
+                                </select>
+                            </div>
+
+                            <!-- Target Device -->
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">
+                                    播放音频设备
+                                </label>
+                                <select id="targetDevice" 
+                                        class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all-300">
+                                    <option value="">加载中...</option>
+                                </select>
+                            </div>
+
+                            <!-- UDP Protocol Option -->
+                            <div class="bg-blue-50 p-4 rounded-lg border border-blue-200">
+                                <div class="flex items-center justify-between">
+                                    <div>
+                                        <label class="block text-sm font-medium text-blue-700 mb-1">
+                                            使用UDP协议
+                                        </label>
+                                        <p class="text-sm text-blue-600">
+                                            启用UDP以获得更低延迟（适合局域网）
+                                        </p>
+                                    </div>
+                                    <div>
+                                        <label class="relative inline-flex items-center cursor-pointer">
+                                            <input type="checkbox" id="useUdp" class="sr-only peer">
+                                            <div class="w-14 h-7 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[4px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-blue-600"></div>
+                                        </label>
+                                    </div>
+                                </div>
+                                <div class="mt-3 text-xs text-blue-500">
+                                    <p>✓ UDP: 更低延迟，无连接开销</p>
+                                    <p>✓ TCP: 更可靠，保证数据完整</p>
+                                </div>
+                            </div>
+
+                            <!-- Add Button -->
+                            <button onclick="addPlayer()" 
+                                    class="w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-3 px-4 rounded-lg transition-all-300 flex items-center justify-center">
+                                <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                                          d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+                                </svg>
+                                添加音频流转
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Connected Clients -->
+                    <div class="bg-white rounded-xl shadow-lg p-6">
+                        <h2 class="text-2xl font-bold text-dark mb-6 pb-3 border-b">已连接客户端</h2>
+                        <div class="space-y-4">
+                            <div id="clientsList" class="max-h-60 overflow-y-auto scrollbar-thin">
+                                <!-- Clients will be loaded here -->
+                                <div class="text-center text-muted py-4">暂无客户端连接</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Right Column: Players List -->
+                <div class="lg:col-span-2">
+                    <div class="bg-white rounded-xl shadow-lg p-6">
+                        <div class="flex justify-between items-center mb-6 pb-3 border-b">
+                            <h2 class="text-2xl font-bold text-dark">音频流转列表</h2>
+                            <div class="text-sm text-muted">
+                                共 <span id="playerCount" class="font-bold text-primary">0</span> 个流转
+                            </div>
+                        </div>
+
+                        <div class="overflow-x-auto">
+                            <table class="w-full">
+                                <thead>
+                                    <tr class="bg-gray-50">
+                                        <th class="py-3 px-4 text-left text-sm font-medium text-gray-700">来源设备</th>
+                                        <th class="py-3 px-4 text-left text-sm font-medium text-gray-700">播放设备</th>
+                                        <th class="py-3 px-4 text-left text-sm font-medium text-gray-700">IP地址</th>
+                                        <th class="py-3 px-4 text-left text-sm font-medium text-gray-700">协议</th>
+                                        <th class="py-3 px-4 text-left text-sm font-medium text-gray-700">状态</th>
+                                        <th class="py-3 px-4 text-left text-sm font-medium text-gray-700">音量</th>
+                                        <th class="py-3 px-4 text-left text-sm font-medium text-gray-700">操作</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="playersList" class="divide-y divide-gray-200">
+                                    <!-- Players will be loaded here -->
+                                    <tr>
+                                        <td colspan="7" class="py-8 text-center text-gray-500">
+                                            <svg class="w-12 h-12 mx-auto text-gray-300 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" 
+                                                      d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"></path>
+                                            </svg>
+                                            <p>暂无音频流转</p>
+                                            <p class="text-sm mt-1">点击上方"添加音频流转"开始使用</p>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- Footer -->
+        <footer class="bg-dark text-white py-6 mt-12">
+            <div class="container mx-auto px-4 text-center">
+                <p class="text-gray-300">音频流转软件 UDP版本 &copy; 2024</p>
+                <p class="text-gray-400 text-sm mt-2">基于原TCP版本开发，提供更低延迟的音频传输体验</p>
+            </div>
+        </footer>
+    </div>
+
+    <script>
+        // Global variables
+        let devices = [];
+        let players = [];
+        let clients = [];
+
+        // Initialize on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            loadDevices();
+            loadPlayers();
+            loadClients();
+            
+            // Auto refresh every 5 seconds
+            setInterval(() => {
+                loadPlayers();
+                loadClients();
+            }, 5000);
+        });
+
+        // Load audio devices
+        async function loadDevices() {
+            try {
+                const response = await fetch('/devices');
+                const result = await response.json();
+                
+                if (result.success) {
+                    devices = result.result;
+                    updateDeviceSelects();
+                }
+            } catch (error) {
+                console.error('Failed to load devices:', error);
+            }
+        }
+
+        // Update device dropdowns
+        function updateDeviceSelects() {
+            const sourceSelect = document.getElementById('sourceDevice');
+            const targetSelect = document.getElementById('targetDevice');
+            
+            // Clear existing options
+            sourceSelect.innerHTML = '';
+            targetSelect.innerHTML = '';
+            
+            // Add default option
+            const defaultOption = document.createElement('option');
+            defaultOption.value = 'default';
+            defaultOption.textContent = '默认设备';
+            sourceSelect.appendChild(defaultOption.cloneNode(true));
+            targetSelect.appendChild(defaultOption.cloneNode(true));
+            
+            // Add device options
+            devices.forEach(device => {
+                const option = document.createElement('option');
+                option.value = device.ID;
+                option.textContent = device.Name + (device.Default ? ' (默认)' : '');
+                sourceSelect.appendChild(option.cloneNode(true));
+                targetSelect.appendChild(option.cloneNode(true));
+            });
+        }
+
+        // Load players list
+        async function loadPlayers() {
+            try {
+                const response = await fetch('/players');
+                const result = await response.json();
+                
+                if (result.success) {
+                    players = result.result || [];
+                    updatePlayersList();
+                }
+            } catch (error) {
+                console.error('Failed to load players:', error);
+            }
+        }
+
+        // Update players list in table
+        function updatePlayersList() {
+            const playersList = document.getElementById('playersList');
+            const playerCount = document.getElementById('playerCount');
+            
+            playerCount.textContent = players.length;
+            
+            if (players.length === 0) {
+                playersList.innerHTML = `
+                    <tr>
+                        <td colspan="7" class="py-8 text-center text-gray-500">
+                            <svg class="w-12 h-12 mx-auto text-gray-300 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" 
+                                      d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"></path>
+                            </svg>
+                            <p>暂无音频流转</p>
+                            <p class="text-sm mt-1">点击上方"添加音频流转"开始使用</p>
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+            
+            let html = '';
+            players.forEach(player => {
+                const protocol = player.UseUdp ? 'UDP' : 'TCP';
+                const protocolColor = player.UseUdp ? 'bg-blue-100 text-blue-800' : 'bg-green-100 text-green-800';
+                
+                html += `
+                    <tr class="hover:bg-gray-50 transition-all-300" id="player-${player.ID}">
+                        <td class="py-4 px-4">
+                            <div class="font-medium">${player.SourceDeviceName || '未知设备'}</div>
+                            <div class="text-sm text-gray-500">${player.SourceDeviceID}</div>
+                        </td>
+                        <td class="py-4 px-4">
+                            <div class="font-medium">${player.TargetDeiceName || '未知设备'}</div>
+                            <div class="text-sm text-gray-500">${player.TargetDeiceID}</div>
+                        </td>
+                        <td class="py-4 px-4">
+                            <div class="font-medium">${player.IP || '本地'}</div>
+                        </td>
+                        <td class="py-4 px-4">
+                            <span class="px-3 py-1 rounded-full text-xs font-medium ${protocolColor}">
+                                ${protocol}
+                            </span>
+                            <button onclick="toggleProtocol('${player.ID}')" 
+                                    class="ml-2 text-xs text-blue-600 hover:text-blue-800">
+                                ${player.UseUdp ? '切换TCP' : '切换UDP'}
+                            </button>
+                        </td>
+                        <td class="py-4 px-4">
+                            <span class="px-3 py-1 rounded-full text-xs font-medium ${player.Play ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}">
+                                ${player.Play ? '播放中' : '已停止'}
+                            </span>
+                        </td>
+                        <td class="py-4 px-4">
+                            <div class="flex items-center space-x-2">
+                                <input type="range" min="0" max="100" value="${player.Volume * 100}" 
+                                       onchange="setVolume('${player.ID}', this.value/100)"
+                                       class="w-24 accent-blue-600">
+                                <span class="text-sm w-10">${Math.round(player.Volume * 100)}%</span>
+                            </div>
+                        </td>
+                        <td class="py-4 px-4">
+                            <div class="flex space-x-2">
+                                ${player.Play ? 
+                                    `<button onclick="stopPlayer('${player.ID}')" 
+                                            class="px-3 py-1 bg-red-100 text-red-700 hover:bg-red-200 rounded text-sm transition-all-300">
+                                        停止
+                                    </button>` :
+                                    `<button onclick="startPlayer('${player.ID}')" 
+                                            class="px-3 py-1 bg-green-100 text-green-700 hover:bg-green-200 rounded text-sm transition-all-300">
+                                        播放
+                                    </button>`
+                                }
+                                <button onclick="deletePlayer('${player.ID}')" 
+                                        class="px-3 py-1 bg-gray-100 text-gray-700 hover:bg-gray-200 rounded text-sm transition-all-300">
+                                    删除
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+            });
+            
+            playersList.innerHTML = html;
+        }
+
+        // Load connected clients
+        async function loadClients() {
+            try {
+                const response = await fetch('/clients');
+                const result = await response.json();
+                
+                if (result.success) {
+                    clients = result.result || [];
+                    updateClientsList();
+                }
+            } catch (error) {
+                console.error('Failed to load clients:', error);
+            }
+        }
+
+        // Update clients list
+        function updateClientsList() {
+            const clientsList = document.getElementById('clientsList');
+            
+            if (clients.length === 0) {
+                clientsList.innerHTML = '<div class="text-center text-muted py-4">暂无客户端连接</div>';
+                return;
+            }
+            
+            let html = '';
+            clients.forEach(client => {
+                html += `
+                    <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-all-300">
+                        <div>
+                            <div class="font-medium">${client.DeviceName}</div>
+                            <div class="text-sm text-gray-500">${client.ClientIp}</div>
+                        </div>
+                        <span class="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full">
+                            已连接
+                        </span>
+                    </div>
+                `;
+            });
+            
+            clientsList.innerHTML = html;
+        }
+
+        // Add new player
+        async function addPlayer() {
+            const ip = document.getElementById('ipAddress').value;
+            const sourceDevice = document.getElementById('sourceDevice').value;
+            const targetDevice = document.getElementById('targetDevice').value;
+            const useUdp = document.getElementById('useUdp').checked;
+            
+            if (!sourceDevice || !targetDevice) {
+                alert('请选择来源设备和播放设备');
+                return;
+            }
+            
+            // Get device names
+            const sourceDeviceName = devices.find(d => d.ID === sourceDevice)?.Name || '';
+            const targetDeviceName = devices.find(d => d.ID === targetDevice)?.Name || '';
+            
+            try {
+                const params = new URLSearchParams({
+                    ip: ip || '',
+                    s_device: sourceDevice,
+                    t_device: targetDevice,
+                    s_device_name: sourceDeviceName,
+                    t_device_name: targetDeviceName,
+                    use_udp: useUdp
+                });
+                
+                const response = await fetch(`/add_player?${params}`);
+                const result = await response.json();
+                
+                if (result.success) {
+                    alert('添加成功！');
+                    loadPlayers();
+                    // Clear form
+                    document.getElementById('ipAddress').value = '';
+                } else {
+                    alert('添加失败: ' + (result.message || '未知错误'));
+                }
+            } catch (error) {
+                console.error('Failed to add player:', error);
+                alert('添加失败，请检查网络连接');
+            }
+        }
+
+        // Start player
+        async function startPlayer(id) {
+            try {
+                const response = await fetch(`/play?id=${id}`);
+                const result = await response.json();
+                
+                if (result.success) {
+                    loadPlayers();
+                } else {
+                    alert('启动失败: ' + (result.message || '未知错误'));
+                }
+            } catch (error) {
+                console.error('Failed to start player:', error);
+                alert('启动失败，请检查网络连接');
+            }
+        }
+
+        // Stop player
+        async function stopPlayer(id) {
+            try {
+                const response = await fetch(`/stop?id=${id}`);
+                const result = await response.json();
+                
+                if (result.success) {
+                    loadPlayers();
+                } else {
+                    alert('停止失败: ' + (result.message || '未知错误'));
+                }
+            } catch (error) {
+                console.error('Failed to stop player:', error);
+                alert('停止失败，请检查网络连接');
+            }
+        }
+
+        // Delete player
+        async function deletePlayer(id) {
+            if (!confirm('确定要删除这个音频流转吗？')) {
+                return;
+            }
+            
+            try {
+                const response = await fetch(`/delete?id=${id}`);
+                const result = await response.json();
+                
+                if (result.success) {
+                    loadPlayers();
+                } else {
+                    alert('删除失败: ' + (result.message || '未知错误'));
+                }
+            } catch (error) {
+                console.error('Failed to delete player:', error);
+                alert('删除失败，请检查网络连接');
+            }
+        }
+
+        // Set volume
+        async function setVolume(id, volume) {
+            try {
+                const response = await fetch(`/set_volume?id=${id}&volume=${volume}`);
+                const result = await response.json();
+                
+                if (!result.success) {
+                    console.error('Failed to set volume:', result.message);
+                }
+            } catch (error) {
+                console.error('Failed to set volume:', error);
+            }
+        }
+
+        // Toggle protocol (UDP/TCP)
+        async function toggleProtocol(id) {
+            const player = players.find(p => p.ID === id);
+            if (!player) return;
+            
+            const newUseUdp = !player.UseUdp;
+            
+            try {
+                const response = await fetch(`/set_udp?id=${id}&use_udp=${newUseUdp}`);
+                const result = await response.json();
+                
+                if (result.success) {
+                    alert(`已切换到${newUseUdp ? 'UDP' : 'TCP'}协议`);
+                    loadPlayers();
+                } else {
+                    alert('切换协议失败: ' + (result.message || '未知错误'));
+                }
+            } catch (error) {
+                console.error('Failed to toggle protocol:', error);
+                alert('切换协议失败，请检查网络连接');
+            }
+        }
+
+        // Refresh all data
+        function refreshAll() {
+            loadDevices();
+            loadPlayers();
+            loadClients();
+        }
+    </script>
+</body>
+
+</html>

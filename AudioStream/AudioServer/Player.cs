@@ -12,6 +12,7 @@ namespace AudioStream.AudioServer
         private IPlayerRedirector audioRedirector;
         private MMDeviceEnumerator deviceEnumerator;
         public Guid ID { get => playerInfo.ID; }
+        
         public Player(PlayerInfo info)
         {
             deviceEnumerator = new MMDeviceEnumerator();
@@ -42,11 +43,22 @@ namespace AudioStream.AudioServer
             var device = AudioDeviceHelper.GetDeviceById(deviceId);
             if (device == null) return;
             playerInfo.Play = true;
+            
             await Task.Run(() =>
             {
                 if (Tools.IsPrivateIPAddress(playerInfo.IP))
                 {
-                    audioRedirector = new NetAudioRedirector(device, playerInfo.IP, playerInfo.SourceDeviceID, playerInfo.Volume);
+                    // 检查是否使用UDP协议
+                    bool useUdp = playerInfo.UseUdp;
+                    
+                    if (useUdp)
+                    {
+                        audioRedirector = new UdpAudioRedirector(device, playerInfo.IP, playerInfo.SourceDeviceID, playerInfo.Volume);
+                    }
+                    else
+                    {
+                        audioRedirector = new NetAudioRedirector(device, playerInfo.IP, playerInfo.SourceDeviceID, playerInfo.Volume);
+                    }
                 }
                 else
                 {

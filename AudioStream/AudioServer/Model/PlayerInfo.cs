@@ -15,6 +15,7 @@ namespace AudioStream.AudioServer
         public float Volume { get; set; } = 1;
         public int Index { get; set; }
         public bool Play { get; set; } = false;
+        public bool UseUdp { get; set; } = false; // 新增：是否使用UDP协议
 
         // 无用
         public bool Hidden { get; set; } = false;

@@ -43,7 +43,13 @@ namespace AudioStream.AudioServer.HttpRoute
         [Route(HttpVerbs.Get, "/clients")]
         public HttpResult<List<ClientItem>> Clients()
         {
-            return new HttpResult<List<ClientItem>>() { Result = InitServer.tcpServer.ClientItems() };
+            // 返回TCP和UDP客户端列表
+            var tcpClients = InitServer.tcpServer.ClientItems();
+            var udpClients = InitServer.udpServer.ClientItems();
+            var allClients = new List<ClientItem>();
+            allClients.AddRange(tcpClients);
+            allClients.AddRange(udpClients);
+            return new HttpResult<List<ClientItem>>() { Result = allClients };
         }
 
         [Route(HttpVerbs.Post, "/add_player")]
@@ -55,6 +61,14 @@ namespace AudioStream.AudioServer.HttpRoute
             var targetDeviceID = ctx.Request.QueryString.Get("t_device");
             var sourceDeviceName = ctx.Request.QueryString.Get("s_device_name");
             var targetDeviceName = ctx.Request.QueryString.Get("t_device_name");
+            var useUdpStr = ctx.Request.QueryString.Get("use_udp");
+            bool useUdp = false;
+            
+            if (!string.IsNullOrEmpty(useUdpStr))
+            {
+                bool.TryParse(useUdpStr, out useUdp);
+            }
+            
             if (string.IsNullOrEmpty(targetDeviceID))
             {
                 return new ResultError()
@@ -83,7 +97,14 @@ namespace AudioStream.AudioServer.HttpRoute
                     Message = "请勿重复添加"
                 };
             }
-            return new HttpResult() { Result = InitServer.playerControl.Add(sourceDeviceID, targetDeviceID, ip, sourceDeviceName, targetDeviceName) };
+            
+            // 修改Add方法以支持useUdp参数
+            var playerInfo = InitServer.playerControl.Add(sourceDeviceID, targetDeviceID, ip, sourceDeviceName, targetDeviceName);
+            if (playerInfo != null)
+            {
+                playerInfo.UseUdp = useUdp;
+            }
+            return new HttpResult() { Result = playerInfo };
         }
 
         [Route(HttpVerbs.Post, "/play")]
@@ -103,12 +124,11 @@ namespace AudioStream.AudioServer.HttpRoute
             return new HttpResult() { Result = InitServer.playerControl.Start(id) };
         }
 
-        [Route(HttpVerbs.Post, "/volume")]
-        public HttpResult Volume()
+        [Route(HttpVerbs.Post, "/stop")]
+        public HttpResult Stop()
         {
             var ctx = HttpContext;
             var id = ctx.Request.QueryString.Get("id");
-            var val = ctx.Request.QueryString.Get("val");
             if (string.IsNullOrEmpty(id))
             {
                 return new ResultError()
@@ -118,12 +138,11 @@ namespace AudioStream.AudioServer.HttpRoute
                     Message = "参数id不能为空"
                 };
             }
-            InitServer.playerControl.SetVolume(id, float.Parse(val));
-            return new HttpResult() { Result = InitServer.playerControl.GetVolume(id) };
+            return new HttpResult() { Result = InitServer.playerControl.Stop(id) };
         }
 
-        [Route(HttpVerbs.Post, "/pause")]
-        public HttpResult Pause()
+        [Route(HttpVerbs.Post, "/delete")]
+        public HttpResult Delete()
         {
             var ctx = HttpContext;
             var id = ctx.Request.QueryString.Get("id");
@@ -136,17 +155,15 @@ namespace AudioStream.AudioServer.HttpRoute
                     Message = "参数id不能为空"
                 };
             }
-            return new HttpResult()
-            {
-                Result = InitServer.playerControl.Stop(id)
-            };
+            return new HttpResult() { Result = InitServer.playerControl.Delete(id) };
         }
 
-        [Route(HttpVerbs.Post, "/del")]
-        public HttpResult Del()
+        [Route(HttpVerbs.Post, "/set_volume")]
+        public HttpResult SetVolume()
         {
             var ctx = HttpContext;
             var id = ctx.Request.QueryString.Get("id");
+            var volumeStr = ctx.Request.QueryString.Get("volume");
             if (string.IsNullOrEmpty(id))
             {
                 return new ResultError()
@@ -156,10 +173,83 @@ namespace AudioStream.AudioServer.HttpRoute
                     Message = "参数id不能为空"
                 };
             }
-            return new HttpResult()
+            if (string.IsNullOrEmpty(volumeStr))
             {
-                Result = InitServer.playerControl.Delete(id)
-            };
+                return new ResultError()
+                {
+                    Success = false,
+                    Code = 500,
+                    Message = "参数volume不能为空"
+                };
+            }
+            if (!float.TryParse(volumeStr, out float volume))
+            {
+                return new ResultError()
+                {
+                    Success = false,
+                    Code = 500,
+                    Message = "参数volume格式错误"
+                };
+            }
+            InitServer.playerControl.SetVolume(id, volume);
+            return new HttpResult() { Result = true };
+        }
+
+        [Route(HttpVerbs.Get, "/get_volume")]
+        public HttpResult<float> GetVolume()
+        {
+            var ctx = HttpContext;
+            var id = ctx.Request.QueryString.Get("id");
+            if (string.IsNullOrEmpty(id))
+            {
+                return new HttpResult<float>() { Success = false, Code = 500, Message = "参数id不能为空" };
+            }
+            return new HttpResult<float>() { Result = InitServer.playerControl.GetVolume(id) };
+        }
+
+        [Route(HttpVerbs.Get, "/set_udp")]
+        public HttpResult SetUdp()
+        {
+            var ctx = HttpContext;
+            var id = ctx.Request.QueryString.Get("id");
+            var useUdpStr = ctx.Request.QueryString.Get("use_udp");
+            
+            if (string.IsNullOrEmpty(id))
+            {
+                return new ResultError()
+                {
+                    Success = false,
+                    Code = 500,
+                    Message = "参数id不能为空"
+                };
+            }
+            
+            bool useUdp = false;
+            if (!string.IsNullOrEmpty(useUdpStr))
+            {
+                bool.TryParse(useUdpStr, out useUdp);
+            }
+            
+            // 获取播放器并更新UDP设置
+            var player = InitServer.playerControl.GetPlayer(id);
+            if (player != null)
+            {
+                // 这里需要重新启动播放器以应用UDP设置
+                // 先停止
+                InitServer.playerControl.Stop(id);
+                
+                // 获取播放器信息并更新UseUdp
+                var players = InitServer.playerControl.GetPlayerInfoList();
+                var playerInfo = players.FirstOrDefault(p => p.ID.ToString() == id);
+                if (playerInfo != null)
+                {
+                    playerInfo.UseUdp = useUdp;
+                    // 重新启动
+                    InitServer.playerControl.Start(id);
+                }
+            }
+            
+            return new HttpResult() { Result = true };
         }
     }
 }
