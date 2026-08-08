@@ -44,7 +44,7 @@ namespace AudioStream.AudioServer
                 }
             }
         }
-        public NetAudioRedirector(MMDevice outputDevice, string address, string sourceDeviceID = null, float Volume = 1)
+        public NetAudioRedirector(MMDevice outputDevice, string address, string sourceDeviceID = null, float Volume = 1, string sourceDeviceName = null)
         {
             _Volume = Volume;
             _address = address;
@@ -54,7 +54,7 @@ namespace AudioStream.AudioServer
                 // 连接到远程设备
                 Connect();
                 // 获取远程设备的音频编码
-                waveFormat = GetWaveFormatExtensible(sourceDeviceID);
+                waveFormat = GetWaveFormatExtensible(sourceDeviceID, sourceDeviceName);
 
                 wasapiOut = new WasapiOut();
                 wasapiOut.Device = outputDevice;
@@ -159,10 +159,10 @@ namespace AudioStream.AudioServer
             }
         }
 
-        private WaveFormat GetWaveFormatExtensible(string sourceDeviceID = null)
+        private WaveFormat GetWaveFormatExtensible(string sourceDeviceID = null, string sourceDeviceName = null)
         {
             byte[] waveFormatBytes = new byte[1024];
-            clientSocket.Send(Encoding.UTF8.GetBytes("/WaveFormat/"+ sourceDeviceID??"0"));
+            clientSocket.Send(Encoding.UTF8.GetBytes("/WaveFormat/" + (sourceDeviceID ?? "0") + "/" + (sourceDeviceName ?? "0")));
             var len = clientSocket.Receive(waveFormatBytes);
             if (len > 36)
             {
@@ -177,7 +177,8 @@ namespace AudioStream.AudioServer
                     );
                     return waveFormat;
                 }
-            }else if (len > 12)
+            }
+            else if (len > 12)
             {
                 using (MemoryStream stream = new MemoryStream(waveFormatBytes))
                 using (BinaryReader reader = new BinaryReader(stream))

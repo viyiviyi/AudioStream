@@ -167,6 +167,14 @@ namespace AudioStream
                                 id = AudioDeviceHelper.GetDefaultOutputDeviceId();
                             }
                             var device = AudioDeviceHelper.GetDeviceById(id);
+                            if (device == null)
+                            {
+                                if (dataReceived.Split('/').Length > 3)
+                                {
+                                    var deviceName = dataReceived.Split('/')[3];
+                                    device = AudioDeviceHelper.GetDeviceByName(deviceName);
+                                }
+                            }
                             if (device != null)
                             {
                                 var count = 0;

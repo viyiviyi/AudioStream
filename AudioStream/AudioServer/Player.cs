@@ -40,13 +40,17 @@ namespace AudioStream.AudioServer
                 deviceEnumerator.DefaultDeviceChanged += OnDefaultChange;
             }
             var device = AudioDeviceHelper.GetDeviceById(deviceId);
+            if (device == null)
+            {
+                device = AudioDeviceHelper.GetDeviceByName(playerInfo.TargetDeiceName);
+            }
             if (device == null) return;
             playerInfo.Play = true;
             await Task.Run(() =>
             {
                 if (Tools.IsPrivateIPAddress(playerInfo.IP))
                 {
-                    audioRedirector = new NetAudioRedirector(device, playerInfo.IP, playerInfo.SourceDeviceID, playerInfo.Volume);
+                    audioRedirector = new NetAudioRedirector(device, playerInfo.IP, playerInfo.SourceDeviceID, playerInfo.Volume, playerInfo.SourceDeviceName);
                 }
                 else
                 {
@@ -57,6 +61,10 @@ namespace AudioStream.AudioServer
                     }
                     if (sourceDeviceId == deviceId) return;
                     var sourceDevice = AudioDeviceHelper.GetDeviceById(sourceDeviceId);
+                    if (sourceDevice == null)
+                    {
+                        sourceDevice = AudioDeviceHelper.GetDeviceByName(playerInfo.SourceDeviceName);
+                    }
                     audioRedirector = new LocalAudioRedirector(sourceDevice, device, playerInfo.Volume);
                 }
             });

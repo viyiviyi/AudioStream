@@ -44,6 +44,25 @@ namespace Common.Helper
             }
         }
 
+        public static MMDevice GetDeviceByName(string deviceName)
+        {
+            using (var enumerator = new MMDeviceEnumerator())
+            {
+                try
+                {
+                    var device = enumerator.EnumAudioEndpoints(DataFlow.Render, DeviceState.Active).FirstOrDefault(a => a.FriendlyName == deviceName);
+                    if (device != null) return device;
+                    device = enumerator.EnumAudioEndpoints(DataFlow.Capture, DeviceState.Active).FirstOrDefault(a => a.FriendlyName == deviceName);
+                    return device;
+                }
+                catch (CoreAudioAPIException ex)
+                {
+                    Console.WriteLine($"Error getting device with Name '{deviceName}': {ex.Message}");
+                    return null;
+                }
+            }
+        }
+
         public static MMDeviceCollection OutputDevices()
         {
             using (var deviceEnumerator = new MMDeviceEnumerator())
