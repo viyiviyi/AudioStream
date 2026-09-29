@@ -6,3 +6,11 @@ packages/
 AudioStream/publish/
 AudioStreamSetup/Debug/
 AudioStreamSetup/Release/
+
+# 本机构建、包缓存与同步用的临时目录
+.dotnet_home/
+.nuget_packages/
+.sync_temp_dir/
+
+# 发布产物（由 build.ps1 -Pack 生成，不入库）
+dist/

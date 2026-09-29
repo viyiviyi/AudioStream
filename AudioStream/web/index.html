@@ -5,813 +5,2114 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>音频流转配置</title>
-    <!-- Tailwind CSS v3 -->
-    <script src="https://cdn.tailwindcss.com"></script>
+    <!--
+      这一页刻意不带任何外链：样式、图标、脚本全部在这一个文件里。
+      目标机器多半在内网、没有外网，挂一个 CDN 只会让页面变成没样式的裸 HTML。
+    -->
+    <style>
+        :root {
+            --primary: #1a365d;
+            --primary-light: #2c5282;
+            --bg: #f4f6f9;
+            --card: #ffffff;
+            --line: #e2e8f0;
+            --line-strong: #cbd5e0;
+            --text: #2d3748;
+            --muted: #718096;
+            --success: #2f855a;
+            --success-bg: #f0fff4;
+            --danger: #c53030;
+            --danger-bg: #fff5f5;
+            --warning: #975a16;
+            --warning-bg: #fffaf0;
+            --info: #2b6cb0;
+            --info-bg: #ebf8ff;
+            --radius: 8px;
+            --shadow: 0 1px 3px rgba(0, 0, 0, .08), 0 1px 2px rgba(0, 0, 0, .04);
+        }
 
-    <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    colors: {
-                        primary: '#1a365d',
-                        secondary: '#f7fafc',
-                        success: '#48bb78',
-                        danger: '#f56565',
-                        warning: '#ecc94b',
-                        dark: '#2d3748',
-                        muted: '#718096',
-                    },
-                    fontFamily: {
-                        sans: ['Inter', 'system-ui', 'sans-serif'],
-                    },
-                    animation: {
-                        'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
-                    }
-                }
+        * {
+            box-sizing: border-box;
+        }
+
+        html,
+        body {
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            background: var(--bg);
+            color: var(--text);
+            font-family: "Microsoft YaHei", "PingFang SC", "Segoe UI", system-ui, sans-serif;
+            font-size: 14px;
+            line-height: 1.6;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .icon {
+            width: 1em;
+            height: 1em;
+            fill: currentColor;
+            vertical-align: -.125em;
+            flex: none;
+        }
+
+        /* ---------- 顶栏 ---------- */
+
+        header.topbar {
+            background: linear-gradient(135deg, #1a365d 0%, #2c5282 100%);
+            color: #fff;
+            box-shadow: var(--shadow);
+        }
+
+        .topbar-inner {
+            max-width: 1180px;
+            margin: 0 auto;
+            padding: 12px 20px;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            flex-wrap: wrap;
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 18px;
+            font-weight: 700;
+        }
+
+        .topbar-spacer {
+            flex: 1;
+        }
+
+        .conn {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 13px;
+            opacity: .95;
+        }
+
+        .dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #48bb78;
+            display: inline-block;
+        }
+
+        .dot.bad {
+            background: #fc8181;
+        }
+
+        main {
+            flex: 1;
+            width: 100%;
+            max-width: 1180px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        /* ---------- 卡片 ---------- */
+
+        .card {
+            background: var(--card);
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+            margin-bottom: 18px;
+            overflow: hidden;
+        }
+
+        .card-head {
+            padding: 12px 16px;
+            border-bottom: 1px solid var(--line);
+            background: #fafbfc;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .card-head h2 {
+            margin: 0;
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--primary);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .card-body {
+            padding: 16px;
+        }
+
+        .card-body.tight {
+            padding: 8px 0;
+        }
+
+        .hint {
+            color: var(--muted);
+            font-size: 12px;
+        }
+
+        .grow {
+            flex: 1;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        /* ---------- 按钮 ---------- */
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            padding: 7px 14px;
+            border: 1px solid transparent;
+            border-radius: 6px;
+            background: #edf2f7;
+            color: var(--text);
+            font-size: 13px;
+            font-family: inherit;
+            cursor: pointer;
+            transition: background .15s ease, opacity .15s ease;
+            white-space: nowrap;
+        }
+
+        .btn:hover {
+            background: #e2e8f0;
+        }
+
+        .btn:disabled {
+            opacity: .6;
+            cursor: default;
+        }
+
+        .btn-primary {
+            background: var(--primary);
+            color: #fff;
+        }
+
+        .btn-primary:hover {
+            background: var(--primary-light);
+        }
+
+        .btn-danger {
+            background: var(--danger);
+            color: #fff;
+        }
+
+        .btn-danger:hover {
+            background: #9b2c2c;
+        }
+
+        .btn-success {
+            background: var(--success);
+            color: #fff;
+        }
+
+        .btn-success:hover {
+            background: #276749;
+        }
+
+        .btn-sm {
+            padding: 4px 10px;
+            font-size: 12px;
+        }
+
+        .btn-ghost {
+            background: transparent;
+            border-color: var(--line-strong);
+        }
+
+        .btn-ghost:hover {
+            background: #f7fafc;
+        }
+
+        /* ---------- 表单 ---------- */
+
+        .form-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 14px;
+            align-items: end;
+        }
+
+        .field label {
+            display: block;
+            font-size: 13px;
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+
+        .field .sub {
+            font-weight: 400;
+            color: var(--muted);
+            font-size: 12px;
+        }
+
+        input[type="text"],
+        select {
+            width: 100%;
+            padding: 7px 10px;
+            border: 1px solid var(--line-strong);
+            border-radius: 6px;
+            font-family: inherit;
+            font-size: 13px;
+            color: var(--text);
+            background: #fff;
+        }
+
+        input[type="text"]:focus,
+        select:focus {
+            outline: none;
+            border-color: var(--primary-light);
+            box-shadow: 0 0 0 3px rgba(44, 82, 130, .12);
+        }
+
+        .check-list {
+            border: 1px solid var(--line);
+            border-radius: 6px;
+            padding: 8px;
+            max-height: 220px;
+            overflow-y: auto;
+            background: #fff;
+        }
+
+        .check-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 4px 6px;
+            border-radius: 6px;
+            cursor: pointer;
+        }
+
+        .check-item:hover {
+            background: #f7fafc;
+        }
+
+        .check-item input {
+            margin: 0;
+        }
+
+        .check-item .name {
+            font-size: 13px;
+            flex: 1;
+        }
+
+        .order-line {
+            margin-top: 6px;
+            font-size: 12px;
+            color: var(--muted);
+            word-break: break-all;
+        }
+
+        /* ---------- 徽标 ---------- */
+
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 2px 8px;
+            border-radius: 999px;
+            font-size: 12px;
+            white-space: nowrap;
+            border: 1px solid transparent;
+            max-width: 100%;
+        }
+
+        /* 徽标文字过长就在行内省略，完整内容挂在 title 上。
+           失败原因可能有整句话那么长，不省略的话会把整行撑破、盖住右边的按钮。 */
+        .badge-text {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .badge-success {
+            background: var(--success-bg);
+            color: var(--success);
+            border-color: #c6f6d5;
+        }
+
+        .badge-warn {
+            background: var(--warning-bg);
+            color: var(--warning);
+            border-color: #fbd38d;
+        }
+
+        .badge-danger {
+            background: var(--danger-bg);
+            color: var(--danger);
+            border-color: #fed7d7;
+        }
+
+        .badge-info {
+            background: var(--info-bg);
+            color: var(--info);
+            border-color: #bee3f8;
+        }
+
+        .badge-muted {
+            background: #edf2f7;
+            color: var(--muted);
+            border-color: var(--line);
+        }
+
+        /* ---------- 本机信息 ---------- */
+
+        .info-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 14px;
+        }
+
+        .info-cell .k {
+            font-size: 12px;
+            color: var(--muted);
+        }
+
+        .info-cell .v {
+            font-size: 14px;
+            font-weight: 600;
+            word-break: break-all;
+        }
+
+        /* 机器号是 32 位十六进制，等宽小字才放得下一行 */
+        #info-machineid {
+            font-family: Consolas, "Courier New", monospace;
+            font-size: 12.5px;
+        }
+
+        .addr-list {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            margin-top: 2px;
+        }
+
+        .addr {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-family: Consolas, "Courier New", monospace;
+            font-size: 13px;
+        }
+
+        .addr .copy {
+            border: 1px solid var(--line-strong);
+            background: #fff;
+            border-radius: 4px;
+            padding: 0 5px;
+            cursor: pointer;
+            font-size: 11px;
+            color: var(--muted);
+            font-family: inherit;
+        }
+
+        .addr .copy:hover {
+            color: var(--primary);
+            border-color: var(--primary-light);
+        }
+
+        /* ---------- 拉取列表 ---------- */
+
+        .row-list {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .player-row {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px 16px;
+            border-bottom: 1px solid var(--line);
+            flex-wrap: wrap;
+        }
+
+        .player-row:last-child {
+            border-bottom: none;
+        }
+
+        .player-row:hover {
+            background: #fafbfc;
+        }
+
+        .col {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .col-source {
+            width: 210px;
+            min-width: 160px;
+        }
+
+        .col-target {
+            width: 250px;
+            min-width: 180px;
+            flex: 1;
+        }
+
+        .col-state {
+            width: 190px;
+            min-width: 0;
+        }
+
+        /* 徽标下面那行「为什么没起来」：一行放不下就省略，鼠标停上去看全的 */
+        .state-detail {
+            display: block;
+            margin-top: 4px;
+            font-size: 11px;
+            color: var(--danger);
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .col-volume {
+            width: 130px;
+        }
+
+        .col-actions {
+            display: flex;
+            gap: 6px;
+            margin-left: auto;
+        }
+
+        .arrow {
+            color: var(--muted);
+            font-size: 16px;
+        }
+
+        .strong {
+            font-weight: 600;
+        }
+
+        .small {
+            font-size: 12px;
+        }
+
+        .muted {
+            color: var(--muted);
+        }
+
+        /* 被拉列表里「链路」那一格：丢过数据标红，没丢标绿 */
+        .bad {
+            color: #c53030;
+        }
+
+        .good {
+            color: #2f855a;
+        }
+
+        /* 音质指标那一行。正常时是灰的，出过欠载或丢数据才变红，
+           让人一眼看出「这次杂音是因为缓冲不够」还是只是常态数字。 */
+        .quality-line {
+            display: block;
+            font-size: 11px;
+            margin-top: 2px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 220px;
+        }
+
+        .quality-line.bad {
+            color: var(--danger);
+        }
+
+        .link {
+            color: var(--info);
+            text-decoration: none;
+        }
+
+        .link:hover {
+            text-decoration: underline;
+        }
+
+        .empty {
+            padding: 28px 16px;
+            text-align: center;
+            color: var(--muted);
+        }
+
+        .empty .icon {
+            width: 28px;
+            height: 28px;
+            display: block;
+            margin: 0 auto 8px;
+            opacity: .35;
+        }
+
+        /* ---------- 表格 ---------- */
+
+        table.table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        table.table th,
+        table.table td {
+            text-align: left;
+            padding: 9px 12px;
+            border-bottom: 1px solid var(--line);
+            font-size: 13px;
+            vertical-align: middle;
+        }
+
+        table.table th {
+            background: #fafbfc;
+            color: var(--muted);
+            font-weight: 600;
+            font-size: 12px;
+        }
+
+        table.table tr:last-child td {
+            border-bottom: none;
+        }
+
+        /* ---------- 编辑面板 ---------- */
+
+        .edit-panel {
+            border: 1px solid #bee3f8;
+            background: var(--info-bg);
+            border-radius: var(--radius);
+            padding: 14px;
+            margin-bottom: 14px;
+        }
+
+        .edit-panel h3 {
+            margin: 0 0 10px;
+            font-size: 14px;
+            color: var(--primary);
+        }
+
+        .edit-actions {
+            display: flex;
+            gap: 8px;
+            margin-top: 12px;
+        }
+
+        /* ---------- 授权 ---------- */
+
+        .approval {
+            border: 1px solid #fbd38d;
+            background: var(--warning-bg);
+            border-radius: var(--radius);
+            padding: 10px 12px;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .approval .grow {
+            flex: 1;
+            min-width: 220px;
+        }
+
+        .grant-line {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 0;
+            border-bottom: 1px solid var(--line);
+        }
+
+        .grant-line:last-child {
+            border-bottom: none;
+        }
+
+        .grant-line .scope {
+            flex: 1;
+            font-size: 13px;
+        }
+
+        .icon-btn {
+            border: none;
+            background: transparent;
+            color: var(--muted);
+            cursor: pointer;
+            padding: 2px 4px;
+            border-radius: 4px;
+        }
+
+        .icon-btn:hover {
+            color: var(--danger);
+            background: #fff5f5;
+        }
+
+        /* ---------- 日志 ---------- */
+
+        .log-box {
+            background: #1a202c;
+            color: #cbd5e0;
+            border-radius: 6px;
+            padding: 10px 12px;
+            font-family: Consolas, "Courier New", monospace;
+            font-size: 12px;
+            line-height: 1.7;
+            max-height: 320px;
+            overflow: auto;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+
+        .log-box .l-error {
+            color: #fc8181;
+        }
+
+        .log-box .l-warn {
+            color: #f6e05e;
+        }
+
+        .log-box .l-debug {
+            color: #718096;
+        }
+
+        /* ---------- 提示 ---------- */
+
+        .toast-wrap {
+            position: fixed;
+            right: 16px;
+            bottom: 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            z-index: 60;
+        }
+
+        .toast {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 14px;
+            border-radius: 6px;
+            color: #fff;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, .18);
+            background: var(--info);
+            font-size: 13px;
+            max-width: 380px;
+        }
+
+        .toast.success {
+            background: var(--success);
+        }
+
+        .toast.error {
+            background: var(--danger);
+        }
+
+        .modal-mask {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, .5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 70;
+        }
+
+        .modal {
+            background: #fff;
+            border-radius: var(--radius);
+            width: 100%;
+            max-width: 420px;
+            margin: 16px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, .25);
+        }
+
+        .modal .modal-head {
+            padding: 14px 16px;
+            border-bottom: 1px solid var(--line);
+            font-weight: 600;
+        }
+
+        .modal .modal-body {
+            padding: 16px;
+        }
+
+        .modal .modal-foot {
+            padding: 12px 16px;
+            border-top: 1px solid var(--line);
+            display: flex;
+            justify-content: flex-end;
+            gap: 8px;
+        }
+
+        footer.foot {
+            padding: 14px 20px;
+            text-align: center;
+            color: var(--muted);
+            font-size: 12px;
+        }
+
+        @media (max-width: 820px) {
+
+            .col-source,
+            .col-target,
+            .col-state,
+            .col-volume {
+                width: 100%;
+            }
+
+            .col-actions {
+                margin-left: 0;
             }
         }
-    </script>
-
-    <style type="text/tailwindcss">
-        @layer utilities {
-      .transition-all-300 {
-        transition: all 0.3s ease;
-      }
-      .bg-gradient-primary {
-        background: linear-gradient(135deg, #1a365d 0%, #2c5282 100%);
-      }
-      .text-shadow {
-        text-shadow: 0 2px 4px rgba(0,0,0,0.1);
-      }
-      .scrollbar-thin {
-        scrollbar-width: thin;
-      }
-      .scrollbar-thin::-webkit-scrollbar {
-        width: 6px;
-        height: 6px;
-      }
-      .scrollbar-thin::-webkit-scrollbar-track {
-        background: #f1f1f1;
-      }
-      .scrollbar-thin::-webkit-scrollbar-thumb {
-        background: #cbd5e0;
-        border-radius: 3px;
-      }
-      .scrollbar-thin::-webkit-scrollbar-thumb:hover {
-        background: #a0aec0;
-      }
-    }
-  </style>
+    </style>
 </head>
 
-<body class="bg-secondary min-h-screen flex flex-col">
-    <!-- 顶部导航栏 -->
-    <header class="bg-gradient-primary text-white shadow-md">
-        <div class="container mx-auto px-4 py-3 flex justify-between items-center">
-            <div class="flex items-center space-x-3">
-                <i class="fa fa-music text-2xl"></i>
-                <h1 class="text-xl font-bold text-shadow">流转配置</h1>
+<body>
+    <!-- 图标定义：全部内联，页面不依赖任何图标字体或外网 -->
+    <svg xmlns="http://www.w3.org/2000/svg" style="display:none" aria-hidden="true">
+        <symbol id="i-play" viewBox="0 0 24 24">
+            <path d="M8 5v14l11-7z" />
+        </symbol>
+        <symbol id="i-stop" viewBox="0 0 24 24">
+            <path d="M6 6h12v12H6z" />
+        </symbol>
+        <symbol id="i-trash" viewBox="0 0 24 24">
+            <path d="M6 19a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z" />
+        </symbol>
+        <symbol id="i-edit" viewBox="0 0 24 24">
+            <path
+                d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z" />
+        </symbol>
+        <symbol id="i-refresh" viewBox="0 0 24 24">
+            <path
+                d="M17.65 6.35A7.958 7.958 0 0 0 12 4a8 8 0 1 0 7.73 10h-2.08A6 6 0 1 1 12 6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z" />
+        </symbol>
+        <symbol id="i-plus" viewBox="0 0 24 24">
+            <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" />
+        </symbol>
+        <symbol id="i-check" viewBox="0 0 24 24">
+            <path d="M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" />
+        </symbol>
+        <symbol id="i-close" viewBox="0 0 24 24">
+            <path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" />
+        </symbol>
+        <symbol id="i-alert" viewBox="0 0 24 24">
+            <path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z" />
+        </symbol>
+        <symbol id="i-info" viewBox="0 0 24 24">
+            <path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z" />
+        </symbol>
+        <symbol id="i-shield" viewBox="0 0 24 24">
+            <path d="M12 1 3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z" />
+        </symbol>
+        <symbol id="i-users" viewBox="0 0 24 24">
+            <path
+                d="M16 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zm-8 0a4 4 0 1 0 0-8 4 4 0 0 0 0 8zm0 2c-2.67 0-8 1.34-8 4v3h16v-3c0-2.66-5.33-4-8-4zm8 0c-.29 0-.62.02-.97.05C16.16 13.9 17 15.32 17 17v3h7v-3c0-2.66-5.33-4-8-4z" />
+        </symbol>
+        <symbol id="i-list" viewBox="0 0 24 24">
+            <path d="M4 6h16v2H4zm0 5h16v2H4zm0 5h16v2H4z" />
+        </symbol>
+        <symbol id="i-terminal" viewBox="0 0 24 24">
+            <path
+                d="M4 4h16a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1zm2 3v10h12V7H6zm2 2h3v2H8V9zm5 0h3v2h-3V9zm-5 4h8v2H8v-2z" />
+        </symbol>
+        <symbol id="i-link" viewBox="0 0 24 24">
+            <path
+                d="M3.9 12c0-1.71 1.39-3.1 3.1-3.1h4V7H7a5 5 0 0 0 0 10h4v-1.9H7c-1.71 0-3.1-1.39-3.1-3.1zM8 13h8v-2H8v2zm9-6h-4v1.9h4c1.71 0 3.1 1.39 3.1 3.1s-1.39 3.1-3.1 3.1h-4V17h4a5 5 0 0 0 0-10z" />
+        </symbol>
+        <symbol id="i-volume" viewBox="0 0 24 24">
+            <path d="M3 9v6h4l5 5V4L7 9H3z" />
+        </symbol>
+        <symbol id="i-save" viewBox="0 0 24 24">
+            <path
+                d="M17 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V7l-4-4zm-5 16a3 3 0 1 1 0-6 3 3 0 0 1 0 6zm3-10H5V5h10v4z" />
+        </symbol>
+        <symbol id="i-desktop" viewBox="0 0 24 24">
+            <path d="M21 2H3a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h7v2H8v2h8v-2h-2v-2h7a1 1 0 0 0 1-1V3a1 1 0 0 0-1-1zm-1 12H4V4h16v10z" />
+        </symbol>
+    </svg>
+
+    <header class="topbar">
+        <div class="topbar-inner">
+            <div class="brand">
+                <svg class="icon" style="width:22px;height:22px">
+                    <use href="#i-volume" />
+                </svg>
+                音频流转配置
             </div>
-            <div class="flex items-center space-x-4">
-                <span id="status-indicator" class="flex items-center">
-                    <span class="w-2 h-2 rounded-full bg-success mr-2"></span>
-                </span>
-                <button id="refresh-btn"
-                    class="px-3 py-1 bg-white/20 hover:bg-white/30 rounded transition-all-300 flex items-center">
-                    <i class="fa fa-refresh mr-1"></i> 刷新
-                </button>
+            <div class="topbar-spacer"></div>
+            <div class="conn">
+                <span id="conn-dot" class="dot"></span>
+                <span id="conn-text">正在连接本机服务…</span>
             </div>
+            <button id="refresh-btn" class="btn btn-ghost" style="color:#fff;border-color:rgba(255,255,255,.5)">
+                <svg class="icon">
+                    <use href="#i-refresh" />
+                </svg> 刷新
+            </button>
         </div>
     </header>
 
-    <!-- 主内容区 -->
-    <main class="flex-grow container mx-auto px-4 py-6">
-        <!-- 播放列表 -->
-        <div class="bg-white rounded-lg shadow-md overflow-hidden">
-            <div class="px-4 py-3 bg-gray-50 border-b border-gray-200 flex justify-between items-center">
-                <h2 class="text-lg font-semibold text-primary flex items-center">
-                    <i class="fa fa-list mr-2"></i> 播放列表
+    <main>
+        <!-- 本机信息：去中心方案里，用户就是照着这里的地址告诉对方该填什么 -->
+        <div class="card">
+            <div class="card-head">
+                <h2>
+                    <svg class="icon">
+                        <use href="#i-desktop" />
+                    </svg> 本机
                 </h2>
+                <span class="hint">对方要在「对方地址」里填下面的任意一个地址（同一内网才连得通）</span>
             </div>
-
-            <div class="overflow-x-auto scrollbar-thin">
-                <div id="player-list" class="min-w-full bg-white divide-y divide-gray-200">
-                    <div class="animate-pulse-slow">
-                        <div colspan="5" class="px-6 py-10 text-center text-muted">
-                            <i class="fa fa-music text-3xl mb-2 block opacity-30"></i>
-                            <p>播放列表为空，请添加播放源</p>
+            <div class="card-body">
+                <div class="info-grid">
+                    <div class="info-cell">
+                        <div class="k">计算机名</div>
+                        <div class="v" id="info-pcname">—</div>
+                    </div>
+                    <div class="info-cell" style="grid-column:span 2">
+                        <div class="k">机器号（对方授权规则里按它认机器）</div>
+                        <div class="v" id="info-machineid">—</div>
+                    </div>
+                    <div class="info-cell">
+                        <div class="k">端口</div>
+                        <div class="v"><span id="info-ports">—</span></div>
+                    </div>
+                    <div class="info-cell">
+                        <div class="k">版本</div>
+                        <div class="v" id="info-version">—</div>
+                    </div>
+                    <div class="info-cell" style="grid-column:1/-1">
+                        <div class="k">可供对方填写的地址</div>
+                        <div class="addr-list" id="info-addresses">
+                            <span class="muted">读取中…</span>
                         </div>
                     </div>
                 </div>
             </div>
         </div>
 
-        <!-- 添加新播放源 -->
-        <div class="bg-white rounded-lg shadow-md p-4 mt-6">
-            <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <div>
-                    <label for="new-ip" class="block text-sm font-medium text-dark mb-1">IP地址</label>
-                    <input type="text" id="new-ip" placeholder="输入设备IP地址"
-                        class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary/50">
-                </div>
-                <div>
-                    <label for="new-remote-device" class="block text-sm font-medium text-dark mb-1">远程音频设备</label>
-                    <select id="new-remote-device"
-                        class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary/50">
-                        <option value="">加载中...</option>
-                    </select>
-                </div>
-                <div>
-                    <label for="new-local-device" class="block text-sm font-medium text-dark mb-1">本地音频设备</label>
-                    <select id="new-local-device"
-                        class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary/50">
-                        <option value="">加载中...</option>
-                    </select>
-                </div>
-                <div class="flex items-end">
-                    <button id="add-player-btn"
-                        class="w-full px-4 py-2 bg-primary hover:bg-primary/90 text-white rounded-md transition-all-300 flex items-center justify-center">
-                        <i class="fa fa-plus mr-2"></i> 添加
-                    </button>
+        <!-- 我拉别人 -->
+        <div class="card">
+            <div class="card-head">
+                <h2>
+                    <svg class="icon">
+                        <use href="#i-list" />
+                    </svg> 我拉的（本机的拉取记录）
+                </h2>
+                <span class="grow"></span>
+                <span class="hint" id="players-summary"></span>
+            </div>
+            <div class="card-body tight">
+                <div id="edit-panel" class="edit-panel hidden" style="margin:14px 16px"></div>
+                <div id="player-list" class="row-list"></div>
+            </div>
+        </div>
+
+        <!-- 添加一条拉取 -->
+        <div class="card">
+            <div class="card-head">
+                <h2>
+                    <svg class="icon">
+                        <use href="#i-plus" />
+                    </svg> 添加一条拉取
+                </h2>
+                <span class="hint">来源可以是对方的扬声器（输出）或麦克风（输入）</span>
+            </div>
+            <div class="card-body">
+                <div class="form-grid">
+                    <div class="field">
+                        <label for="new-ip">对方地址</label>
+                        <input type="text" id="new-ip" placeholder="对方 IP；留空 = 拉本机自己的设备">
+                    </div>
+                    <div class="field">
+                        <label for="new-remote-device">来源设备 <span class="sub" id="source-hint">（本机）</span></label>
+                        <select id="new-remote-device">
+                            <option value="">加载中…</option>
+                        </select>
+                    </div>
+                    <div class="field">
+                        <label for="new-policy">播放策略</label>
+                        <select id="new-policy">
+                            <option value="All">全部同时播放</option>
+                            <option value="Failover">按顺序主备（用第一块能用的）</option>
+                        </select>
+                    </div>
+                    <div class="field" style="grid-column:1/-1">
+                        <label style="display:flex;align-items:center;gap:8px;justify-content:space-between">
+                            <span>
+                                播放到本机的哪些设备 <span class="sub">可多选；主备策略下越靠前越优先。输入设备不能当播放目标——往麦克风里推声音没有意义</span>
+                            </span>
+                            <!-- 刚插上的耳机、刚装的虚拟声卡不会自己出现在这里，得有个就地重新枚举的入口 -->
+                            <button type="button" id="local-devices-refresh" class="btn btn-sm btn-ghost"
+                                title="重新枚举本机音频设备（刚插上的耳机、刚装的虚拟声卡）">
+                                <svg class="icon">
+                                    <use href="#i-refresh" />
+                                </svg> 刷新设备
+                            </button>
+                        </label>
+                        <div id="new-local-devices" class="check-list">
+                            <span class="muted small">加载中…</span>
+                        </div>
+                        <div id="new-target-order" class="order-line"></div>
+                    </div>
+                    <div class="field">
+                        <button id="add-player-btn" class="btn btn-primary">
+                            <svg class="icon">
+                                <use href="#i-plus" />
+                            </svg> 添加
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>
 
-        <div class="bg-white rounded-lg shadow-md overflow-hidden mt-6">
-            <div class="px-4 py-3 bg-gray-50 border-b border-gray-200 flex justify-between items-center">
-                <h2 class="text-lg font-semibold text-primary flex items-center">
-                    <i class="fa fa-list mr-2"></i> 客户端列表
+        <!-- 谁在拉我 -->
+        <div class="card">
+            <div class="card-head">
+                <h2>
+                    <svg class="icon">
+                        <use href="#i-users" />
+                    </svg> 谁在拉我（本机被拉取的连接）
                 </h2>
+                <span class="grow"></span>
+                <span class="hint" id="clients-summary"></span>
             </div>
-
-            <div class="overflow-x-auto scrollbar-thin">
-                <table class="min-w-full divide-y divide-gray-200">
-                    <tbody id="client-list" class="bg-white divide-y divide-gray-200">
-                        <!-- 播放列表项将通过JavaScript动态添加 -->
-                        <tr class="animate-pulse-slow">
-                            <td colspan="5" class="px-6 py-10 text-center text-muted">
-                                <i class="fa fa-music text-3xl mb-2 block opacity-30"></i>
-                                <p>无设备连接</p>
-                            </td>
+            <div class="card-body tight">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>被拉的设备</th>
+                            <th>谁在拉</th>
+                            <th>状态</th>
+                            <th>链路</th>
+                            <th>连上时间</th>
                         </tr>
-                    </tbody>
+                    </thead>
+                    <tbody id="client-list"></tbody>
                 </table>
             </div>
         </div>
-    </main>
-    <!-- 底部状态栏 -->
-    <footer class="bg-gray-100 border-t border-gray-200 py-3">
-        <div class="container mx-auto px-4 flex justify-between items-center text-sm text-muted">
-            <!-- <div>
-                <span id="active-players">0</span> 个活跃播放源
-            </div> -->
+
+        <!-- 拉取授权 -->
+        <div class="card" id="auth-card">
+            <div class="card-head">
+                <h2>
+                    <svg class="icon">
+                        <use href="#i-shield" />
+                    </svg> 拉取授权
+                </h2>
+                <span class="grow"></span>
+                <div class="field" style="display:flex;align-items:center;gap:8px">
+                    <label for="grant-default" style="margin:0">默认档</label>
+                    <select id="grant-default" style="width:auto">
+                        <option value="无需确认">无需确认</option>
+                        <option value="需确认">需确认</option>
+                        <option value="永不允许">永不允许</option>
+                    </select>
+                </div>
+            </div>
+            <div class="card-body">
+                <p class="hint" style="margin-top:0">
+                    别人来拉本机的音频时按这里的规则放行。没有规则命中就按默认档；规则越具体越优先：
+                    机器+设备 &gt; 机器 &gt; 设备 &gt; 全部。
+                </p>
+
+                <div id="approval-list"></div>
+                <div id="grant-list" style="margin-bottom:14px"></div>
+
+                <div class="form-grid">
+                    <div class="field">
+                        <label for="grant-machine">对方机器号</label>
+                        <input type="text" id="grant-machine" placeholder="留空 = 任意机器">
+                    </div>
+                    <div class="field">
+                        <label for="grant-device">本机设备</label>
+                        <select id="grant-device">
+                            <option value="">任意设备</option>
+                        </select>
+                    </div>
+                    <div class="field">
+                        <label for="grant-access">档位</label>
+                        <select id="grant-access">
+                            <option value="无需确认">无需确认</option>
+                            <option value="需确认">需确认</option>
+                            <option value="永不允许">永不允许</option>
+                        </select>
+                    </div>
+                    <div class="field">
+                        <button id="grant-add-btn" class="btn btn-primary">
+                            <svg class="icon">
+                                <use href="#i-plus" />
+                            </svg> 添加规则
+                        </button>
+                    </div>
+                </div>
+            </div>
         </div>
+
+        <!-- 日志 -->
+        <div class="card">
+            <div class="card-head">
+                <h2>
+                    <svg class="icon">
+                        <use href="#i-terminal" />
+                    </svg> 日志
+                </h2>
+                <span class="grow"></span>
+                <span class="hint" id="log-file"></span>
+                <button id="log-toggle" class="btn btn-sm btn-ghost">展开</button>
+                <button id="log-refresh" class="btn btn-sm btn-ghost hidden">
+                    <svg class="icon">
+                        <use href="#i-refresh" />
+                    </svg> 刷新
+                </button>
+            </div>
+            <div class="card-body hidden" id="log-body">
+                <div class="log-box" id="log-box">展开后每 5 秒自动刷新…</div>
+            </div>
+        </div>
+    </main>
+
+    <footer class="foot">
+        关掉这个页面不影响程序运行，程序常驻在托盘里。
     </footer>
 
-    <!-- 确认对话框 -->
-    <div id="confirm-dialog" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 hidden">
-        <div class="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
-            <div class="p-4 border-b border-gray-200">
-                <h3 class="text-lg font-semibold text-dark">确认操作</h3>
+    <div class="toast-wrap" id="toast-wrap"></div>
+
+    <div class="modal-mask hidden" id="confirm-dialog">
+        <div class="modal">
+            <div class="modal-head">确认操作</div>
+            <div class="modal-body">
+                <p id="confirm-message" style="margin:0">您确定要执行此操作吗？</p>
             </div>
-            <div class="p-4">
-                <p id="confirm-message" class="text-dark">您确定要执行此操作吗？</p>
-            </div>
-            <div class="p-4 border-t border-gray-200 flex justify-end space-x-3">
-                <button id="cancel-btn"
-                    class="px-4 py-2 border border-gray-300 rounded-md text-dark hover:bg-gray-50 transition-all-300">
-                    取消
-                </button>
-                <button id="confirm-btn"
-                    class="px-4 py-2 bg-danger text-white rounded-md hover:bg-danger/90 transition-all-300">
-                    确认
-                </button>
+            <div class="modal-foot">
+                <button id="cancel-btn" class="btn btn-ghost">取消</button>
+                <button id="confirm-btn" class="btn btn-danger">确认</button>
             </div>
         </div>
     </div>
 
     <script>
-        let serverHost = 'http://127.0.0.1:12570';
-        if (location.port == 12570) {
-            serverHost = location.protocol + '//' + location.host
-        }
-        // 模拟数据 - 在实际应用中，这些数据将从API获取
-        let localDevices = [];
+        // 服务地址：从本机 12570 打开的页面直接用同源；被远程打开时也回到本机接口
+        const HOST = (location.port === '12570') ? (location.protocol + '//' + location.host) : 'http://127.0.0.1:12570';
+        const API = HOST + '/api';
 
-        // 模拟播放列表数据
-        let players = [];
+        // ---------- 状态 ----------
+        let info = null;
+        let devices = [];                 // 本机全部端点（输出在前、输入在后）
+        let players = [];                 // 配置里的拉取记录
+        let statuses = {};                // 记录 ID -> 真实状态
+        let clients = [];                 // 正在拉本机的连接
+        let grants = { DefaultAccess: '', Grants: [], Pending: [] };
+        let selectedTargets = [];         // 添加时勾选的目标，顺序即主备顺序
+        let editTargets = [];             // 编辑面板里勾选的目标
+        let editing = null;               // 正在编辑的拉取记录
+        let remoteDeviceCache = {};       // 对端 IP -> 设备列表
+        let playerSignature = '';         // 结构没变就不重建列表，免得打断正在拖的音量条
+        let volumeDragging = false;
+        let logExpanded = false;
         let currentOperation = null;
-        let currentPlayerId = null;
 
-        // DOM元素
-        const playerList = document.getElementById('player-list');
-        const clientList = document.getElementById('client-list');
-        const newIpInput = document.getElementById('new-ip');
-        const newRemoteDeviceSelect = document.getElementById('new-remote-device');
-        const newLocalDeviceSelect = document.getElementById('new-local-device');
-        const addPlayerBtn = document.getElementById('add-player-btn');
-        const refreshBtn = document.getElementById('refresh-btn');
-        const playerCountSpan = document.getElementById('player-count');
-        const activePlayersSpan = document.getElementById('active-players');
-        const lastUpdatedSpan = document.getElementById('last-updated');
-        const confirmDialog = document.getElementById('confirm-dialog');
-        const confirmMessage = document.getElementById('confirm-message');
-        const confirmBtn = document.getElementById('confirm-btn');
-        const cancelBtn = document.getElementById('cancel-btn');
-        function fetchWithTimeout(url, options, timeout = 5000) {
+        // ---------- DOM ----------
+        const $ = (id) => document.getElementById(id);
+        const playerListEl = $('player-list');
+        const clientListEl = $('client-list');
+        const newIpInput = $('new-ip');
+        const newRemoteDeviceSelect = $('new-remote-device');
+        const newLocalDeviceList = $('new-local-devices');
+        const newPolicySelect = $('new-policy');
+        const addPlayerBtn = $('add-player-btn');
+        const editPanel = $('edit-panel');
+        const grantDefaultSelect = $('grant-default');
+        const grantMachineInput = $('grant-machine');
+        const grantDeviceSelect = $('grant-device');
+        const grantAccessSelect = $('grant-access');
+        const grantAddBtn = $('grant-add-btn');
+        const grantListEl = $('grant-list');
+        const approvalListEl = $('approval-list');
+        const logBox = $('log-box');
+        const logBody = $('log-body');
+        const logToggle = $('log-toggle');
+        const logRefresh = $('log-refresh');
+        const logFileEl = $('log-file');
+
+        // ---------- 基础工具 ----------
+
+        function escapeHtml(text) {
+            return String(text == null ? '' : text)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;');
+        }
+
+        function fetchWithTimeout(url, options, timeout) {
+            const ms = timeout || 8000;
             return Promise.race([
                 fetch(url, options),
-                new Promise((_, reject) =>
-                    setTimeout(() => reject(new Error('Request timeout')), timeout)
-                )
+                new Promise((_, reject) => setTimeout(() => reject(new Error('请求超时')), ms))
             ]);
         }
-        // 初始化函数
-        async function init() {
-            try {
-                // 在实际应用中，这里会调用API获取播放列表
-                await loadDevices();
-                await loadPlayers();
-                loadClients();
 
-                populateDeviceSelect(newRemoteDeviceSelect, localDevices);
-                populateDeviceSelect(newLocalDeviceSelect, localDevices);
-
-                // 设置事件监听器
-                setupEventListeners();
-            } catch (error) {
-                console.error('初始化失败:', error);
-                showError('初始化失败，请检查服务连接');
-            }
+        async function api(path, options, timeout) {
+            const response = await fetchWithTimeout(API + path, options, timeout);
+            return await response.json();
         }
 
-        // 加载设备列表
+        function showToast(message, type) {
+            const box = document.createElement('div');
+            box.className = 'toast' + (type ? ' ' + type : '');
+            const icon = type === 'success' ? 'i-check' : (type === 'error' ? 'i-alert' : 'i-info');
+            box.innerHTML = '<svg class="icon"><use href="#' + icon + '"/></svg><span>' + escapeHtml(message) + '</span>';
+            $('toast-wrap').appendChild(box);
+            setTimeout(() => { if (box.isConnected) box.remove(); }, 4000);
+        }
+        const showSuccess = (m) => showToast(m, 'success');
+        const showError = (m) => showToast(m, 'error');
+
+        function setConn(ok, text) {
+            $('conn-dot').className = 'dot' + (ok ? '' : ' bad');
+            $('conn-text').textContent = text;
+        }
+
+        function formatTime(value) {
+            if (!value) return '—';
+            const d = new Date(value);
+            if (isNaN(d.getTime())) return '—';
+            const pad = (n) => (n < 10 ? '0' + n : '' + n);
+            return pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds());
+        }
+
+        function deviceNameOf(selectElement, value) {
+            const option = Array.from(selectElement.options).find(v => v.value === value);
+            return option ? (option.dataset.name || option.textContent) : '';
+        }
+
+        // ---------- 加载 ----------
+
+        async function loadInfo() {
+            const res = await api('/info');
+            if (!res.Success || !res.Result) throw new Error(res.Message || '读取本机信息失败');
+            info = res.Result;
+            renderInfo();
+        }
+
         async function loadDevices() {
-            try {
-                const response = await fetchWithTimeout(serverHost + '/api/devices');
-                const res = await response.json();
-                if (res.Success) {
-                    localDevices = res.Result
-                } else {
-                    showError(res.Message || "出错");
-                }
-            } catch (error) {
-                console.error('加载设备失败:', error);
-                showError('加载设备失败，请重试');
-            }
+            const res = await api('/devices');
+            if (!res.Success) throw new Error(res.Message || '加载设备列表失败');
+            devices = res.Result || [];
+            populateSourceSelect();
+            renderTargetPicker(newLocalDeviceList, selectedTargets, devices);
+            populateGrantDeviceSelect();
         }
 
-        // 加载播放列表
         async function loadPlayers() {
-            try {
-                const response = await fetchWithTimeout(serverHost + '/api/players');
-                var res = await response.json();
-                if (res.Success) {
-                    players = res.Result
-                } else {
-                    showError(res.Message || "出错");
-                }
-                setTimeout(() => {
-                    loadClients();
-                }, 1000);
-                // 更新播放列表UI
-                renderPlayerList();
-            } catch (error) {
-                console.error('加载播放列表失败:', error);
-                showError('加载播放列表失败，请重试');
+            const res = await api('/players');
+            if (!res.Success) throw new Error(res.Message || '加载拉取记录失败');
+            players = res.Result || [];
+            await loadStatuses();
+            renderPlayers();
+        }
+
+        async function loadStatuses() {
+            const res = await api('/play-status');
+            statuses = {};
+            if (res.Success && res.Result) {
+                res.Result.forEach(item => { statuses[item.ID] = item; });
             }
         }
-        // 加载客户端列表
+
         async function loadClients() {
-            try {
-                const response = await fetchWithTimeout(serverHost + '/api/clients');
-                var res = await response.json();
-                var clients = []
-                if (res.Success) {
-                    clients = res.Result
-                } else {
-                    showError(res.Message || "出错");
-                }
+            const res = await api('/clients');
+            clients = (res.Success && res.Result) ? res.Result : [];
+            renderClients();
+        }
 
-                // 更新播放列表UI
-                renderClientList(clients);
-            } catch (error) {
-                console.error('加载客户端列表失败:', error);
-                showError('加载客户端列表失败');
+        async function loadGrants() {
+            const res = await api('/grants');
+            if (res.Success && res.Result) {
+                grants = res.Result;
+                renderGrants();
             }
         }
 
-        // 根据IP地址加载远程设备
-        const _remoteDevicesCache = {};
+        async function loadLogs() {
+            const res = await api('/logs?lines=200');
+            if (res.Success && res.Result) renderLogs(res.Result);
+        }
+
+        // 对端设备：填了 IP 之后去问对面要一份设备清单
         async function loadRemoteDevices(ip) {
-            try {
-                if (_remoteDevicesCache[ip]) return _remoteDevicesCache[ip]
-                const response = await fetchWithTimeout('http://' + ip + ':12570' + '/api/devices');
-                const res = await response.json();
-                if (res.Success) {
-                    _remoteDevicesCache[ip] = res.Result;
-                    return res.Result
-                } else {
-                    showError(res.Message || "出错");
-                }
-            } catch (error) {
-                console.error('加载远程设备失败:', error);
-                showError('加载远程设备失败，请检查IP地址');
-                return []
-            }
+            if (remoteDeviceCache[ip]) return remoteDeviceCache[ip];
+            const response = await fetchWithTimeout('http://' + ip + ':12570/api/devices', null, 6000);
+            const res = await response.json();
+            if (!res.Success) throw new Error(res.Message || '对方没有返回设备列表');
+            remoteDeviceCache[ip] = res.Result || [];
+            return remoteDeviceCache[ip];
         }
 
-        // 填充设备选择下拉框
-        function populateDeviceSelect(selectElement, devices) {
-            selectElement.innerHTML = '<option value="">请选择设备</option>';
-            const option = document.createElement('option');
-            option.value = 'default';
-            option.textContent = '系统默认';
-            selectElement.appendChild(option);
+        // ---------- 渲染：本机信息 ----------
+
+        function renderInfo() {
+            if (!info) return;
+            $('info-pcname').textContent = info.PcName || '—';
+            $('info-machineid').textContent = info.MachineId || '—';
+            $('info-ports').textContent = '配置页 ' + info.HttpPort + ' · 音频 ' + info.TcpPort;
+            $('info-version').textContent = info.Version || '—';
+
+            const list = info.Addresses || [];
+            const box = $('info-addresses');
+            if (list.length === 0) {
+                box.innerHTML = '<span class="muted">没有找到可用的内网地址，请检查网卡。</span>';
+                return;
+            }
+            box.innerHTML = list.map(ip =>
+                '<div class="addr"><span>' + escapeHtml(ip) + '</span>' +
+                '<button class="copy" data-ip="' + escapeHtml(ip) + '">复制</button></div>'
+            ).join('');
+        }
+
+        async function copyText(text, button) {
+            let ok = false;
+            try {
+                if (navigator.clipboard && window.isSecureContext) {
+                    await navigator.clipboard.writeText(text);
+                    ok = true;
+                }
+            } catch (e) { ok = false; }
+            if (!ok) {
+                // 用局域网 IP 打开时不是安全上下文，退回老办法
+                try {
+                    const ta = document.createElement('textarea');
+                    ta.value = text;
+                    ta.style.position = 'fixed';
+                    ta.style.opacity = '0';
+                    document.body.appendChild(ta);
+                    ta.select();
+                    ok = document.execCommand('copy');
+                    ta.remove();
+                } catch (e) { ok = false; }
+            }
+            if (button) button.textContent = ok ? '已复制' : '请手动复制';
+            setTimeout(() => { if (button && button.isConnected) button.textContent = '复制'; }, 1500);
+        }
+
+        // ---------- 渲染：拉取列表 ----------
+
+        function describeState(status) {
+            const state = (status && status.State) || '';
+            if (status && status.AudioFlowing) {
+                const names = (status.ActiveDeviceNames || []).join('、');
+                return { cls: 'badge-success', icon: 'i-volume', text: names ? ('出声中（' + names + '）') : '出声中' };
+            }
+            if (state === 'error') {
+                // 徽标上只写四个字，整句原因挪到下面那行小字里——
+                // 直接塞进徽标的话，那句话长起来会把整行撑破、盖住右边的按钮。
+                return { cls: 'badge-danger', icon: 'i-alert', text: '起不来', detail: (status.Error || '') };
+            }
+            if (state === 'connecting') {
+                const wait = status.NextRetryInSeconds > 0 ? ('，' + status.NextRetryInSeconds + ' 秒后重试') : '';
+                return { cls: 'badge-warn', icon: 'i-link', text: '连接中' + wait };
+            }
+            if (state === 'stopped') {
+                return { cls: 'badge-muted', icon: 'i-stop', text: '已停止' };
+            }
+            if (status && status.Playing) {
+                return { cls: 'badge-info', icon: 'i-play', text: '已连上，暂无声音' };
+            }
+            return { cls: 'badge-muted', icon: 'i-play', text: '待机' };
+        }
+
+        // 徽标统一从这里出：文字用 .badge-text 包住才能省略，
+        // 完整内容同时挂到 title 上，鼠标停上去仍然看得到全的。
+        function badgeHtml(cls, text, icon, detail) {
+            const title = detail ? ' title="' + escapeHtml(detail) + '"' : '';
+            return '<span class="badge ' + cls + '"' + title + '>' +
+                (icon ? '<svg class="icon"><use href="#' + icon + '"/></svg>' : '') +
+                '<span class="badge-text">' + escapeHtml(text) + '</span></span>';
+        }
+
+        // 音质数字。用户只会说「有杂音」，这一行把成因分开：
+        // 欠载一直涨是缓冲不够（网络或调度），时钟校正是两端声卡晶振不同步，丢旧数据是卡了很久。
+        // 摘要文字由服务端拼好（PlaybackQuality.Summary），这里只负责显示与上色。
+        function qualityLineHtml(status) {
+            const q = status && status.Quality;
+            if (!q || !q.Summary) return '';
+            const bad = (q.Underruns > 0) || (q.DroppedMs > 0);
+            const detail = '缓冲容量 ' + q.CapacityMs + 'ms'
+                + ' · 累计喂给声卡 ' + (Math.round(q.ServedBytes / 1048576 * 10) / 10) + 'MB'
+                + ' · 时钟校正 补 ' + q.DriftRepeatMs + 'ms / 丢 ' + q.DriftDropMs + 'ms'
+                + ' · 补静音 ' + q.SilenceMs + 'ms';
+            return '<span class="quality-line' + (bad ? ' bad' : ' muted') + '" title="' + escapeHtml(detail) + '">'
+                + escapeHtml(q.Summary) + '</span>';
+        }
+
+        // 状态列 = 徽标 + 音质数字。两处（整体重渲染、只刷状态）都用它，免得长歪。
+        function stateCellHtml(status) {
+            return '<div class="state-line">' + stateBadgeHtml(status) + '</div>' + qualityLineHtml(status);
+        }
+
+        function stateBadgeHtml(status) {
+            const state = describeState(status);
+            const html = badgeHtml(state.cls, state.text, state.icon, state.detail);
+            if (!state.detail) return html;
+            return html + '<span class="state-detail" title="' + escapeHtml(state.detail) + '">' +
+                escapeHtml(state.detail) + '</span>';
+        }
+
+        function targetsText(player) {
+            const targets = player.Targets || [];
+            if (!targets.length) return '未指定播放设备';
+            const sep = player.Policy === 'Failover' ? ' → ' : ' + ';
+            return targets.map(t => t.DeviceName || t.DeviceID || '未知设备').join(sep);
+        }
+
+        function structureSignature(list) {
+            return JSON.stringify(list.map(p => [
+                p.ID, p.IP || '', p.SourceDeviceID || '', p.Policy || '',
+                (p.Targets || []).map(t => (t.DeviceID || '') + '@' + t.Priority).join(','),
+                p.Play ? 1 : 0
+            ]));
+        }
+
+        function renderPlayers() {
+            const summary = $('players-summary');
+            if (summary) {
+                summary.textContent = players.length
+                    ? ('共 ' + players.length + ' 条，其中 ' + players.filter(p => p.Play).length + ' 条在跑')
+                    : '';
+            }
+
+            const signature = structureSignature(players);
+            if (signature === playerSignature) {
+                updatePlayerStates();
+                return;
+            }
+            playerSignature = signature;
+
+            if (players.length === 0) {
+                playerListEl.innerHTML =
+                    '<div class="empty"><svg class="icon"><use href="#i-list"/></svg>' +
+                    '<p>还没有配置任何拉取。在下面「添加一条拉取」里选来源和播放目标。</p></div>';
+                return;
+            }
+
+            playerListEl.innerHTML = players.map(player => {
+                const isFailover = player.Policy === 'Failover';
+                const source = player.IP
+                    ? '<a class="link" target="_blank" rel="noopener" href="http://' + escapeHtml(player.IP) + ':12570">' + escapeHtml(player.IP) + '</a>'
+                    : '<span class="muted">本机</span>';
+                return '' +
+                    '<div class="player-row" data-player-id="' + escapeHtml(player.ID) + '">' +
+                    '  <div class="col col-source">' +
+                    '    <span class="strong">' + source + '</span>' +
+                    '    <span class="small muted">来源：' + escapeHtml(player.SourceDeviceName || player.SourceDeviceID || '未知设备') + '</span>' +
+                    '  </div>' +
+                    '  <span class="arrow">→</span>' +
+                    '  <div class="col col-target">' +
+                    '    <span class="small">' + escapeHtml(targetsText(player)) + '</span>' +
+                    '    <span class="small muted">' + (isFailover ? '按顺序主备' : '全部同时播放') + ' · ' + ((player.Targets || []).length) + ' 个目标设备</span>' +
+                    '  </div>' +
+                    '  <div class="col col-state">' + stateCellHtml(statuses[player.ID]) + '</div>' +
+                    '  <div class="col col-volume">' +
+                    '    <input type="range" class="volume-set" data-id="' + escapeHtml(player.ID) + '" min="0" max="100" value="' + Math.round(player.Volume * 50) + '">' +
+                    '  </div>' +
+                    '  <div class="col-actions">' +
+                    '    <button class="btn btn-sm ' + (player.Play ? 'btn-danger' : 'btn-success') + ' control-btn" data-id="' + escapeHtml(player.ID) + '" data-action="' + (player.Play ? 'stop' : 'play') + '">' +
+                    '      <svg class="icon"><use href="#' + (player.Play ? 'i-stop' : 'i-play') + '"/></svg> ' + (player.Play ? '停止' : '播放') + '</button>' +
+                    '    <button class="btn btn-sm btn-ghost edit-btn" data-id="' + escapeHtml(player.ID) + '">' +
+                    '      <svg class="icon"><use href="#i-edit"/></svg> 改目标</button>' +
+                    '    <button class="btn btn-sm btn-ghost delete-btn" data-id="' + escapeHtml(player.ID) + '">' +
+                    '      <svg class="icon"><use href="#i-trash"/></svg> 删除</button>' +
+                    '  </div>' +
+                    '</div>';
+            }).join('');
+
+            updatePlayerStates();
+        }
+
+        // 只刷新状态徽标：结构没变时不必重建整个列表，否则正在拖的音量条会被打断
+        function updatePlayerStates() {
+            players.forEach(player => {
+                const row = playerListEl.querySelector('[data-player-id="' + player.ID + '"]');
+                if (!row) return;
+                const cell = row.querySelector('.col-state');
+                if (cell) cell.innerHTML = stateCellHtml(statuses[player.ID]);
+            });
+        }
+
+        // ---------- 渲染：播放目标多选 ----------
+
+        // 添加面板与编辑面板共用。devices 传本机全部端点，这里只挑输出设备。
+        // selected 里可能留着已经拔掉的设备（编辑老记录时），也要列出来，不然一保存就把它弄丢了。
+        function renderTargetPicker(container, selected, deviceList) {
+            if (!container) return;
+            const candidates = [{ ID: 'default', Name: '系统默认输出', Flow: 'output' }]
+                .concat((deviceList || []).filter(d => (d.Flow || 'output') === 'output'));
+            const missing = selected.filter(t => !candidates.some(c => c.ID === t.deviceId));
+            const all = candidates.concat(missing.map(t => ({ ID: t.deviceId, Name: t.deviceName, Flow: 'output', Offline: true })));
+
+            container.innerHTML = all.map(device => {
+                const checked = selected.some(t => t.deviceId === device.ID) ? ' checked' : '';
+                const offline = device.Offline ? '<span class="badge badge-warn">已离线</span>' : '';
+                return '<label class="check-item">' +
+                    '<input type="checkbox" value="' + escapeHtml(device.ID) + '" data-name="' + escapeHtml(device.Name) + '"' + checked + '>' +
+                    '<span class="name">' + escapeHtml(device.Name) + '</span>' + offline +
+                    '</label>';
+            }).join('');
+        }
+
+        // 勾选顺序就是主备顺序：原来勾过的按原次序排在前面，新勾的排后面
+        function collectTargetsFrom(container, current, orderBox) {
+            const checked = Array.from(container.querySelectorAll('input[type="checkbox"]:checked'));
+            const result = [];
+            current.forEach(t => {
+                if (checked.some(c => c.value === t.deviceId)) {
+                    result.push({ deviceId: t.deviceId, deviceName: t.deviceName });
+                }
+            });
+            checked.forEach(c => {
+                if (!result.some(t => t.deviceId === c.value)) {
+                    result.push({ deviceId: c.value, deviceName: c.dataset.name || c.value });
+                }
+            });
+            if (orderBox) {
+                orderBox.textContent = result.length
+                    ? ('已选顺序：' + result.map((t, i) => (i + 1) + '. ' + t.deviceName).join(' → '))
+                    : '还没选播放设备';
+            }
+            return result;
+        }
+
+        function wireTargetPicker(container, orderBox, getter, setter) {
+            container.addEventListener('change', () => {
+                setter(collectTargetsFrom(container, getter(), orderBox));
+            });
+        }
+
+        // ---------- 渲染：添加面板的来源下拉 ----------
+
+        // 两个「跟随系统默认」的来源项。设备号由被拉取的那台机器解析，
+        // 所以选的是对方那一刻的默认设备：对方把默认扬声器换成耳机，这条拉取自己就跟过去了。
+        const DEFAULT_SOURCE_OPTIONS = [
+            { id: 'default', name: '系统默认输出设备', text: '系统默认输出设备（录默认扬声器正在放的声音）' },
+            { id: 'default-input', name: '系统默认输入设备', text: '系统默认输入设备（录默认麦克风）' }
+        ];
+
+        function populateSourceSelect() {
+            const ip = (newIpInput.value || '').trim();
+            const list = ip ? (remoteDeviceCache[ip] || []) : devices;
+            const keep = newRemoteDeviceSelect.value;
+            newRemoteDeviceSelect.innerHTML = '';
+
+            // 这两项与设备枚举无关，永远排在最前面：机器上还没插麦克风、或者一时连不上对方，
+            // 都不影响先把「跟随默认」选定下来。
+            const defaultGroup = document.createElement('optgroup');
+            defaultGroup.label = '跟随系统默认（对方换了默认设备后自动跟着走）';
+            DEFAULT_SOURCE_OPTIONS.forEach(item => {
+                const option = document.createElement('option');
+                option.value = item.id;
+                option.textContent = item.text;
+                option.dataset.name = item.name;
+                defaultGroup.appendChild(option);
+            });
+            newRemoteDeviceSelect.appendChild(defaultGroup);
+
+            const groups = [
+                { flow: 'output', label: '输出设备（扬声器、耳机：录下它正在放的声音）' },
+                { flow: 'input', label: '输入设备（麦克风、线路输入：录下它收到的声音）' }
+            ];
+            let count = 0;
+            groups.forEach(group => {
+                const items = list.filter(d => (d.Flow || 'output') === group.flow);
+                if (!items.length) return;
+                const optgroup = document.createElement('optgroup');
+                optgroup.label = group.label;
+                items.forEach(device => {
+                    const option = document.createElement('option');
+                    option.value = device.ID;
+                    option.textContent = device.Name + (device.Default ? '（默认）' : '');
+                    option.dataset.name = device.Name;
+                    optgroup.appendChild(option);
+                });
+                newRemoteDeviceSelect.appendChild(optgroup);
+                count += items.length;
+            });
+
+            if (count === 0) {
+                // 占位只为说明情况，禁掉以免被选中——真正能选的还有上面那两项。
+                const option = document.createElement('option');
+                option.value = '';
+                option.textContent = ip ? '对方没有其它可用设备（或没连上）' : '本机没有其它可用设备';
+                option.disabled = true;
+                newRemoteDeviceSelect.appendChild(option);
+            }
+            if (keep && Array.from(newRemoteDeviceSelect.options).some(o => o.value === keep)) {
+                newRemoteDeviceSelect.value = keep;
+            }
+
+            const hint = $('source-hint');
+            if (hint) hint.textContent = ip ? ('（' + ip + ' 上）') : '（本机）';
+        }
+
+        // ---------- 渲染：被拉列表 ----------
+
+        function clientState(client) {
+            if (client.ApprovalPending) return { cls: 'badge-warn', text: '有人在等你确认' };
+            if (client.Note) {
+                const bad = (client.Note.indexOf('拒绝') >= 0 || client.Note.indexOf('超时') >= 0);
+                return { cls: bad ? 'badge-danger' : 'badge-info', text: client.Note };
+            }
+            if (client.Streaming) return { cls: 'badge-success', text: '正在送音频' };
+            return { cls: 'badge-muted', text: '已连上，还没点单' };
+        }
+
+        function renderClients() {
+            const summary = $('clients-summary');
+            if (summary) summary.textContent = clients.length ? (clients.length + ' 条连接') : '';
+
+            if (!clients.length) {
+                clientListEl.innerHTML = '<tr><td colspan="5"><div class="empty">' +
+                    '<svg class="icon"><use href="#i-users"/></svg><p>此刻没有别的机器在拉本机音频。</p></div></td></tr>';
+                return;
+            }
+            clientListEl.innerHTML = clients.map(client => {
+                const state = clientState(client);
+                const who = client.ClientIp
+                    ? '<a class="link" target="_blank" rel="noopener" href="http://' + escapeHtml(client.ClientIp) + ':12570">' + escapeHtml(client.ClientIp) + '</a>'
+                    : '<span class="muted">未知来源</span>';
+                const peer = client.PcName ? ' <span class="small muted">' + escapeHtml(client.PcName) + '</span>' : '';
+                // 本机发出去多少、队列有没有丢，是本机这一侧唯一能自己回答的两个数
+                const sent = client.SentAudioBytes ? ('已发 ' + formatBytes(client.SentAudioBytes)) : '';
+                const dropped = client.DroppedMs > 0
+                    ? '<span class="bad">丢弃 ' + client.DroppedMs + 'ms</span>'
+                    : (sent ? '<span class="good">无丢弃</span>' : '');
+                const link = sent || dropped
+                    ? (sent + (sent && dropped ? ' · ' : '') + dropped)
+                    : '<span class="muted">—</span>';
+                return '<tr>' +
+                    '<td>' + escapeHtml(client.DeviceName || '未知设备') + '</td>' +
+                    '<td>' + who + peer + '</td>' +
+                    '<td>' + badgeHtml(state.cls, state.text, null, state.text) +
+                    (client.ApprovalPending ? ' <a class="link small" href="#auth-card">去批准</a>' : '') + '</td>' +
+                    '<td class="small">' + link + '</td>' +
+                    '<td class="small muted">' + formatTime(client.ConnectedAt) + '</td>' +
+                    '</tr>';
+            }).join('');
+        }
+
+        // 字节数换成给人看的单位
+        function formatBytes(value) {
+            const n = Number(value) || 0;
+            if (n < 1024) return n + ' B';
+            if (n < 1024 * 1024) return (n / 1024).toFixed(1) + ' KB';
+            if (n < 1024 * 1024 * 1024) return (n / (1024 * 1024)).toFixed(1) + ' MB';
+            return (n / (1024 * 1024 * 1024)).toFixed(2) + ' GB';
+        }
+
+        // ---------- 渲染：授权 ----------
+
+        function renderGrants() {
+            if (grantDefaultSelect && grants.DefaultAccess) grantDefaultSelect.value = grants.DefaultAccess;
+            renderApprovals(grants.Pending || []);
+            renderGrantList(grants.Grants || []);
+        }
+
+        function renderApprovals(pending) {
+            if (!pending.length) {
+                approvalListEl.innerHTML = '';
+                return;
+            }
+            approvalListEl.innerHTML = pending.map(item => '' +
+                '<div class="approval">' +
+                '  <div class="grow">' +
+                '    <span class="strong">' + escapeHtml(item.PcName || item.MachineId || item.ClientIp || '未知机器') + '</span>' +
+                '    <span class="muted small">（' + escapeHtml(item.ClientIp || '') + '）</span> 想拉 ' +
+                '    <span class="strong">' + escapeHtml(item.DeviceName || item.DeviceId || '未知设备') + '</span>' +
+                '    <span class="muted small">· 还剩 ' + item.RemainingSeconds + ' 秒</span>' +
+                '  </div>' +
+                '  <label class="small muted" style="display:flex;align-items:center;gap:4px">' +
+                '    <input type="checkbox" class="grant-remember" data-id="' + escapeHtml(item.Id) + '">记住选择</label>' +
+                '  <button class="btn btn-sm btn-primary grant-approve" data-id="' + escapeHtml(item.Id) + '">' +
+                '    <svg class="icon"><use href="#i-check"/></svg> 批准</button>' +
+                '  <button class="btn btn-sm btn-ghost grant-reject" data-id="' + escapeHtml(item.Id) + '">' +
+                '    <svg class="icon"><use href="#i-close"/></svg> 拒绝</button>' +
+                '</div>').join('');
+        }
+
+        function renderGrantList(list) {
+            if (!list.length) {
+                grantListEl.innerHTML = '<p class="hint" style="margin:0">还没有规则，所有拉取都按上面的默认档处理。</p>';
+                return;
+            }
+            grantListEl.innerHTML = list.map(grant => {
+                const cls = grant.Access === '永不允许' ? 'badge-danger'
+                    : (grant.Access === '需确认' ? 'badge-warn' : 'badge-success');
+                return '<div class="grant-line">' +
+                    '<span class="scope">' + escapeHtml(grant.Scope || '') + '</span>' +
+                    '<span class="badge ' + cls + '">' + escapeHtml(grant.Access || '') + '</span>' +
+                    '<button class="icon-btn grant-delete" data-id="' + escapeHtml(grant.Id) + '" title="删除这条规则">' +
+                    '<svg class="icon"><use href="#i-trash"/></svg></button>' +
+                    '</div>';
+            }).join('');
+        }
+
+        function populateGrantDeviceSelect() {
+            const keep = grantDeviceSelect.value;
+            grantDeviceSelect.innerHTML = '<option value="">任意设备</option>';
             devices.forEach(device => {
                 const option = document.createElement('option');
                 option.value = device.ID;
-                option.textContent = device.Name;
-                selectElement.appendChild(option);
+                option.dataset.name = device.Name;
+                option.textContent = device.Name
+                    + (device.Flow === 'input' ? '（输入）' : '')
+                    + (device.Default ? '（默认）' : '');
+                grantDeviceSelect.appendChild(option);
             });
+            if (keep) grantDeviceSelect.value = keep;
         }
 
-        // 渲染播放列表
-        async function renderPlayerList() {
-            // 如果列表为空，显示提示信息
-            if (players.length === 0) {
-                // 清空列表
-                playerList.innerHTML = '';
-                const emptyRow = document.createElement('div');
-                emptyRow.className = 'animate-pulse-slow';
-                emptyRow.innerHTML = `
-          <div colspan="5" class="px-6 py-10 text-center text-muted">
-            <i class="fa fa-music text-3xl mb-2 block opacity-30"></i>
-            <p>播放列表为空，请添加播放源</p>
-          </div>
-        `;
-                playerList.appendChild(emptyRow);
+        // ---------- 渲染：日志 ----------
+
+        function renderLogs(result) {
+            if (logFileEl) logFileEl.textContent = result.File ? ('文件：' + result.File) : '';
+            const lines = result.Lines || [];
+            if (!lines.length) {
+                logBox.textContent = '日志文件还是空的。';
                 return;
             }
-            let rows = [];
-            // 为每个播放源创建列表项
-            for (let index = 0; index < players.length; index++) {
-                const player = players[index];
-                const row = document.createElement('div');
-                row.className = 'hover:bg-gray-50 transition-all-300 flex';
-                row.dataset.id = player.id;
-
-                // 设置状态样式和文本
-                let statusClass = 'bg-gray-200 text-gray-700';
-                let statusText = '待机';
-                let statusIcon = 'fa-circle-o';
-
-                if (player.Play) {
-                    statusClass = 'bg-success text-white';
-                    statusText = '播放中';
-                    statusIcon = 'fa-play-circle';
-                } else {
-                    statusClass = 'bg-danger text-white';
-                    statusText = '已停止';
-                    statusIcon = 'fa-stop-circle';
-                }
-
-                // 设置播放/停止按钮样式和文本
-                const controlBtnClass = player.Play
-                    ? 'bg-danger hover:bg-danger/90 text-white'
-                    : 'bg-success hover:bg-success/90 text-white';
-                const controlBtnIcon = player.Play ? 'fa-stop' : 'fa-play';
-                const controlBtnText = player.Play ? '停止' : '播放';
-
-                row.innerHTML = `
-          <div class="px-4 py-4" style="width:220px">
-            <div class="text-sm font-medium text-dark">${player.IP ? ('<a target="_black" href="http://' + player.IP + ':12570">' + player.IP + '</a>') : ''}</div>
-            <div class="text-sm text-dark">${player.SourceDeviceName ? player.SourceDeviceName : '未知设备'}</div>
-          </div>
-          <div class="px-2 py-4 whitespace-nowrap"  style="width:50px">
-           <span class="ml-1">→</span>
-          </div>
-          <div class="px-2 py-4"  style="width:220px">
-            <div class="text-sm text-dark">${player.TargetDeiceName ? player.TargetDeiceName : '未知设备'}</div>
-          </div>
-          <div class="flex-1"></div>
-          <div class="px-0 py-4"  style="width:200px">
-            <label>
-              <input style="cursor: pointer" type="range" class="volume-set w-[100%]" min="0" max="100" value="${(player.Volume * 50).toFixed(2)}" />
-            </label>
-          </div>
-          <div class="px-2 py-4 whitespace-nowrap text-right text-sm font-medium" style="width:140px">
-            <button class="control-btn px-3 py-1 rounded-md text-xs ${controlBtnClass} mr-2" 
-                    data-id="${player.ID}" 
-                    data-action="${player.Play ? 'stop' : 'play'}">
-              <i class="fa ${controlBtnIcon} mr-1"></i> ${controlBtnText}
-            </button>
-            <button class="delete-btn px-3 py-1 bg-gray-200 hover:bg-gray-300 text-dark rounded-md text-xs" 
-                    data-id="${player.ID}">
-              <i class="fa fa-trash-o mr-1"></i> 删除
-            </button>
-          </div>
-        `;
-                rows.push(row)
-            }
-            playerList.innerHTML = '';
-            rows.forEach(row => playerList.appendChild(row))
-
-            // 添加事件监听器
-            document.querySelectorAll('.control-btn').forEach(btn => {
-                btn.addEventListener('click', handleControlClick);
-            });
-
-            document.querySelectorAll('.delete-btn').forEach(btn => {
-                btn.addEventListener('click', handleDeleteClick);
-            });
-            document.querySelectorAll('.volume-set').forEach((btn, idx) => {
-                btn.addEventListener('input', function (e) { updateVolume(this.value, idx) });
-            });
-        }
-        let setVolumeTimer = 0;
-        function updateVolume(val, idx) {
-            clearTimeout(setVolumeTimer)
-            setVolumeTimer = setTimeout(async () => {
-                const playerId = players[idx].ID;
-                const volume = (val / 50).toFixed(3);
-                const response = await fetchWithTimeout(serverHost + '/api/volume?id=' + playerId + '&val=' + volume, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    }
-                });
-                const res = await response.json();
-                if (res.Success) {
-                } else {
-                    loadPlayers();
-                    showError(res.Message || "出错");
-                }
-            }, 100);
-
-        }
-        async function renderClientList(clients) {
-
-            // 如果列表为空，显示提示信息
-            if (clients.length === 0) {
-                // 清空列表
-                clientList.innerHTML = '';
-                const emptyRow = document.createElement('tr');
-                emptyRow.className = 'animate-pulse-slow';
-                emptyRow.innerHTML = `
-          <td colspan="5" class="px-6 py-10 text-center text-muted">
-            <i class="fa fa-music text-3xl mb-2 block opacity-30"></i>
-            <p>无设备连接</p>
-          </td>
-        `;
-                clientList.appendChild(emptyRow);
-                return;
-            }
-            let rows = [];
-            // 为每个播放源创建列表项
-            for (let index = 0; index < clients.length; index++) {
-                const client = clients[index];
-                const row = document.createElement('tr');
-                row.className = 'hover:bg-gray-50 transition-all-300';
-                row.innerHTML = `
-          <td class="px-3 py-4">
-            <div class="text-sm text-dark">${client.DeviceName}</div>
-          </td>
-          <td class="px-2 py-4 whitespace-nowrap">
-           <span class="ml-1">→</span>
-          </td>
-          <td class="px-3 py-4">
-            <div class="text-sm text-dark">${client.ClientIp ? ('<a target="_black" href="http://' + client.ClientIp + ':12570">' + client.ClientIp + '</a>') : ''}</div>
-          </td>
-        `;
-                rows.push(row)
-            }
-            clientList.innerHTML = '';
-            rows.forEach(row => clientList.appendChild(row))
-        }
-        // 设置事件监听器
-        function setupEventListeners() {
-            // IP地址输入变化时加载远程设备
-            newIpInput.addEventListener('blur', async () => {
-                newRemoteDeviceSelect.innerHTML = '<option value="">加载中...</option>'
-                const ip = newIpInput.value.trim();
-                if (ip) {
-                    var remoteDevices = await loadRemoteDevices(ip);
-                    remoteDevices.forEach(v => {
-                        populateDeviceSelect(newRemoteDeviceSelect, remoteDevices)
-                    })
-                } else {
-                    populateDeviceSelect(newRemoteDeviceSelect, localDevices)
-                }
-            });
-            newIpInput.addEventListener('keypress', async (e) => {
-                if (e.keyCode == 13) {
-                    newRemoteDeviceSelect.innerHTML = '<option value="">加载中...</option>'
-                    const ip = newIpInput.value.trim();
-                    if (ip) {
-                        var remoteDevices = await loadRemoteDevices(ip);
-                        remoteDevices.forEach(v => {
-                            populateDeviceSelect(newRemoteDeviceSelect, remoteDevices)
-                        })
-                    } else {
-                        populateDeviceSelect(newRemoteDeviceSelect, localDevices)
-                    }
-                }
-            });
-            // 添加播放源按钮点击事件
-            addPlayerBtn.addEventListener('click', handleAddPlayer);
-            refreshBtn.addEventListener('click', async () => {
-                refreshBtn.disabled = true;
-                refreshBtn.innerHTML = '<i class="fa fa-spinner fa-spin mr-1"></i> 刷新中...';
-
-                try {
-                    await Promise.all([loadDevices(), loadPlayers()]);
-                    populateDeviceSelect(newLocalDeviceSelect, localDevices);
-                } finally {
-                    refreshBtn.disabled = false;
-                    refreshBtn.innerHTML = '<i class="fa fa-refresh mr-1"></i> 刷新';
-                }
-            });
-            // 确认对话框按钮事件
-            confirmBtn.addEventListener('click', handleConfirm);
-            cancelBtn.addEventListener('click', handleCancel);
+            logBox.innerHTML = lines.map(line => {
+                let cls = '';
+                if (/^\s*error/.test(line)) cls = ' class="l-error"';
+                else if (/^\s*warn/.test(line)) cls = ' class="l-warn"';
+                else if (/^\s*debug/.test(line)) cls = ' class="l-debug"';
+                return '<div' + cls + '>' + escapeHtml(line) + '</div>';
+            }).join('');
         }
 
-        // 处理添加播放源
+        // ---------- 操作：拉取 ----------
+
         async function handleAddPlayer() {
             const ip = newIpInput.value.trim();
-            const remoteDeviceId = newRemoteDeviceSelect.value;
-            const localDeviceId = newLocalDeviceSelect.value;
-            const remoteDeviceName = Array.from(newRemoteDeviceSelect).find(v => v.value == remoteDeviceId).innerText;
-            const localDeviceName = Array.from(newLocalDeviceSelect).find(v => v.value == localDeviceId).innerText;
+            const sourceDeviceId = newRemoteDeviceSelect.value;
+            const sourceDeviceName = deviceNameOf(newRemoteDeviceSelect, sourceDeviceId);
 
-            if (!remoteDeviceId) {
+            if (!sourceDeviceId) {
                 showError('请选择来源音频设备');
-                newRemoteDeviceSelect.focus();
+                return;
+            }
+            if (selectedTargets.length === 0) {
+                showError('请至少勾选一个播放设备');
                 return;
             }
 
-            if (!localDeviceId) {
-                showError('请选择播放音频设备');
-                newLocalDeviceSelect.focus();
-                return;
-            }
-
+            addPlayerBtn.disabled = true;
             try {
-                // 禁用按钮并显示加载状态
-                addPlayerBtn.disabled = true;
-                addPlayerBtn.innerHTML = '<i class="fa fa-spinner fa-spin mr-2"></i> 添加中...';
-
-                // 创建新播放源对象
-                const newPlayer = {
-                    ip,
-                    s_device: remoteDeviceId,
-                    t_device: localDeviceId,
-                    s_device_name: remoteDeviceName,
-                    t_device_name: localDeviceName
-                };
-
-                const response = await fetchWithTimeout(serverHost + '/api/add_player?' + Object.keys(newPlayer).map(key => `${key}=${newPlayer[key]}`).join('&'), {
+                const res = await api('/players', {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify(newPlayer)
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        IP: ip,
+                        SourceDeviceID: sourceDeviceId,
+                        SourceDeviceName: sourceDeviceName,
+                        Policy: newPolicySelect.value,
+                        Targets: selectedTargets.map(t => ({ DeviceID: t.deviceId, DeviceName: t.deviceName }))
+                    })
                 });
-                const res = await response.json();
                 if (res.Success) {
-                    // 添加到本地播放列表
-                    players.push(newPlayer);
-
-                    // 更新UI
+                    selectedTargets = [];
+                    renderTargetPicker(newLocalDeviceList, selectedTargets, devices);
+                    collectTargetsFrom(newLocalDeviceList, selectedTargets, $('new-target-order'));
+                    playerSignature = '';
                     await loadPlayers();
-
-                    // 显示成功消息
-                    showSuccess('播放源添加成功');
+                    showSuccess('已添加');
                 } else {
-                    showError(res.Message || "出错");
+                    showError(res.Message || '添加失败');
                 }
-            } catch (error) {
-                console.error('添加播放源失败:', error);
-                showError('添加播放源失败，请重试');
+            } catch (e) {
+                console.error('添加拉取失败:', e);
+                showError('添加失败，请重试');
             } finally {
-                // 恢复按钮状态
                 addPlayerBtn.disabled = false;
-                addPlayerBtn.innerHTML = '<i class="fa fa-plus mr-2"></i> 添加到列表';
             }
         }
 
-        // 处理播放/停止控制
-        async function handleControlClick(event) {
-            const playerId = event.currentTarget.dataset.id;
-            const action = event.currentTarget.dataset.action;
-
+        async function handleControlClick(button) {
+            const id = button.dataset.id;
+            const action = button.dataset.action;
+            button.disabled = true;
             try {
-                // 找到对应的播放源
-                const playerIndex = players.findIndex(p => p.ID === playerId);
-                if (playerIndex === -1) {
-                    showError('播放源不存在');
-                    return;
-                }
-
-                const player = players[playerIndex];
-
-                // 禁用按钮并显示加载状态
-                const btn = event.currentTarget;
-                const originalContent = btn.innerHTML;
-                btn.disabled = true;
-                btn.innerHTML = '<i class="fa fa-spinner fa-spin mr-1"></i> 处理中...';
-
-                if (action === 'play') {
-                    const response = await fetchWithTimeout(serverHost + '/api/play?id=' + playerId, {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json'
-                        },
-                        body: JSON.stringify(player)
-                    });
-                    const res = await response.json();
-                    if (res.Success) {
-                        // 更新状态
-                        player.Play = true;
-                    } else {
-                        showError(res.Message || "出错");
-                    }
-                } else {
-                    const response = await fetchWithTimeout(serverHost + `/api/pause?id=${playerId}`, {
-                        method: 'POST'
-                    });
-                    const res = await response.json();
-                    if (res.Success) {
-                        // 更新状态
-                        player.Play = false;
-                    } else {
-                        showError(res.Message || "出错");
-                    }
-                }
-
-                // 更新UI
-                await loadPlayers();
-
-                // 显示成功消息
-                showSuccess(action === 'play' ? '开始播放' : '已停止播放');
-            } catch (error) {
-                console.error(`${action === 'play' ? '播放' : '停止'}失败:`, error);
-                showError(`${action === 'play' ? '播放' : '停止'}失败，请重试`);
-            }
-        }
-
-        // 处理删除播放源
-        async function handleDeleteClick(event) {
-            const playerId = event.currentTarget.dataset.id;
-
-            const player = players.find(p => p.ID === playerId);
-            if (!player) {
-                showError('播放源不存在');
-                return;
-            }
-
-            // 设置当前操作和播放源ID
-            currentOperation = 'delete';
-            currentPlayerId = playerId;
-
-            // 显示确认对话框
-            confirmMessage.textContent = `确定要删除吗？`;
-            confirmDialog.classList.remove('hidden');
-        }
-
-        // 处理确认操作
-        async function handleConfirm() {
-            try {
-                // 隐藏确认对话框
-                confirmDialog.classList.add('hidden');
-
-                if (currentOperation === 'delete' && currentPlayerId) {
-                    // 找到对应的播放源
-                    const playerIndex = players.findIndex(p => p.ID === currentPlayerId);
-                    if (playerIndex === -1) {
-                        showError('播放源不存在');
-                        return;
-                    }
-
-                    const player = players[playerIndex];
-
-                    const response = await fetchWithTimeout(serverHost + `/api/del?id=${currentPlayerId}`, {
-                        method: 'POST'
-                    });
-                    const res = await response.json();
-                    if (res.Success) {
-                        // 从本地播放列表中删除
-                        players.splice(playerIndex, 1);
-
-                        // 更新UI
-                        await loadPlayers();
-
-                        // 显示成功消息
-                        showSuccess('播放源已删除');
-                    } else {
-                        showError(res.Message || "出错");
-                    }
-
-                }
-            } catch (error) {
-                console.error('操作失败:', error);
+                const res = await api('/' + (action === 'play' ? 'play' : 'pause') + '?id=' + encodeURIComponent(id), { method: 'POST' });
+                if (!res.Success) showError(res.Message || '操作失败');
+                else showSuccess(action === 'play' ? '开始播放' : '已停止');
+            } catch (e) {
+                console.error('播放控制失败:', e);
                 showError('操作失败，请重试');
             } finally {
-                // 重置当前操作
-                currentOperation = null;
-                currentPlayerId = null;
+                button.disabled = false;
+                playerSignature = '';           // 让按钮文字跟着新状态重排
+                await loadPlayers();
             }
         }
 
-        // 处理取消操作
-        function handleCancel() {
-            // 隐藏确认对话框
-            confirmDialog.classList.add('hidden');
+        let volumeTimer = 0;
+        function handleVolumeInput(input) {
+            clearTimeout(volumeTimer);
+            volumeDragging = true;
+            volumeTimer = setTimeout(async () => {
+                const id = input.dataset.id;
+                const volume = (input.value / 50).toFixed(3);
+                try {
+                    const res = await api('/volume?id=' + encodeURIComponent(id) + '&val=' + volume, { method: 'POST' });
+                    if (!res.Success) showError(res.Message || '设置音量失败');
+                } catch (e) {
+                    console.error('设置音量失败:', e);
+                    showError('设置音量失败');
+                } finally {
+                    volumeDragging = false;
+                }
+            }, 200);
+        }
 
-            // 重置当前操作
+        function handleDeleteClick(button) {
+            const player = players.find(p => p.ID === button.dataset.id);
+            if (!player) { showError('这条记录已经不存在了'); return; }
+            currentOperation = { type: 'delete', id: player.ID };
+            $('confirm-message').textContent = '确定删除「' +
+                (player.IP || '本机') + ' → ' + (player.SourceDeviceName || '未知设备') + '」这条拉取吗？';
+            $('confirm-dialog').classList.remove('hidden');
+        }
+
+        async function handleConfirm() {
+            $('confirm-dialog').classList.add('hidden');
+            const operation = currentOperation;
             currentOperation = null;
-            currentPlayerId = null;
-        }
-
-        // 显示成功消息
-        function showSuccess(message) {
-            showNotification(message, 'success');
-        }
-
-        // 显示错误消息
-        function showError(message) {
-            showNotification(message, 'error');
-        }
-
-        // 显示信息消息
-        function showInfo(message) {
-            showNotification(message, 'info');
-        }
-
-        // 显示通知
-        function showNotification(message, type = 'info') {
-            // 创建通知元素
-            const notification = document.createElement('div');
-
-            // 设置样式和内容
-            let bgColor = 'bg-blue-500';
-            let icon = 'fa-info-circle';
-
-            if (type === 'success') {
-                bgColor = 'bg-success';
-                icon = 'fa-check-circle';
-            } else if (type === 'error') {
-                bgColor = 'bg-danger';
-                icon = 'fa-exclamation-circle';
+            if (!operation || operation.type !== 'delete') return;
+            try {
+                const res = await api('/del?id=' + encodeURIComponent(operation.id), { method: 'POST' });
+                if (res.Success) showSuccess('已删除');
+                else showError(res.Message || '删除失败');
+            } catch (e) {
+                console.error('删除失败:', e);
+                showError('删除失败，请重试');
             }
+            playerSignature = '';
+            await loadPlayers();
+        }
 
-            notification.className = `fixed bottom-4 right-4 px-4 py-3 rounded-md shadow-lg text-white ${bgColor} transform translate-y-full opacity-0 transition-all duration-300 z-50`;
-            notification.innerHTML = `
-        <div class="flex items-center">
-          <i class="fa ${icon} mr-2"></i>
-          <span>${message}</span>
-        </div>
-      `;
+        // ---------- 操作：改目标与策略 ----------
 
-            // 添加到文档
-            document.body.appendChild(notification);
+        function openEdit(id) {
+            const player = players.find(p => p.ID === id);
+            if (!player) { showError('这条记录已经不存在了'); return; }
+            editing = { id: player.ID, player: player };
+            editTargets = (player.Targets || []).map(t => ({ deviceId: t.DeviceID, deviceName: t.DeviceName }));
 
-            // 显示通知
-            setTimeout(() => {
-                notification.classList.remove('translate-y-full', 'opacity-0');
-            }, 100);
+            editPanel.innerHTML = '' +
+                '<h3>修改这一路：' + escapeHtml(player.IP || '本机') + ' · ' +
+                escapeHtml(player.SourceDeviceName || player.SourceDeviceID || '未知设备') + '</h3>' +
+                '<div class="form-grid">' +
+                '  <div class="field">' +
+                '    <label for="edit-policy">播放策略</label>' +
+                '    <select id="edit-policy">' +
+                '      <option value="All"' + (player.Policy === 'Failover' ? '' : ' selected') + '>全部同时播放</option>' +
+                '      <option value="Failover"' + (player.Policy === 'Failover' ? ' selected' : '') + '>按顺序主备（用第一块能用的）</option>' +
+                '    </select>' +
+                '  </div>' +
+                '  <div class="field" style="grid-column:1/-1">' +
+                '    <label>播放到本机的哪些设备</label>' +
+                '    <div id="edit-local-devices" class="check-list"></div>' +
+                '    <div id="edit-target-order" class="order-line"></div>' +
+                '  </div>' +
+                '</div>' +
+                '<div class="edit-actions">' +
+                '  <button id="edit-save-btn" class="btn btn-primary"><svg class="icon"><use href="#i-save"/></svg> 保存</button>' +
+                '  <button id="edit-cancel-btn" class="btn btn-ghost">取消</button>' +
+                '  <span class="hint" style="align-self:center">保存后这一路会按新配置重新连一次，中途会断一下再响</span>' +
+                '</div>';
 
-            // 自动隐藏
-            setTimeout(() => {
-                notification.classList.add('translate-y-full', 'opacity-0');
+            const container = $('edit-local-devices');
+            renderTargetPicker(container, editTargets, devices);
+            collectTargetsFrom(container, editTargets, $('edit-target-order'));
+            wireTargetPicker(container, $('edit-target-order'), () => editTargets, (next) => { editTargets = next; });
 
-                // 移除元素
-                setTimeout(() => {
-                    if (notification.isConnected) {
-                        document.body.removeChild(notification);
+            $('edit-save-btn').addEventListener('click', saveEdit);
+            $('edit-cancel-btn').addEventListener('click', closeEdit);
+            editPanel.classList.remove('hidden');
+            editPanel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+
+        function closeEdit() {
+            editing = null;
+            editTargets = [];
+            editPanel.classList.add('hidden');
+            editPanel.innerHTML = '';
+        }
+
+        async function saveEdit() {
+            if (!editing) return;
+            if (editTargets.length === 0) {
+                showError('请至少勾选一个播放设备');
+                return;
+            }
+            const player = editing.player;
+            const policy = $('edit-policy').value;
+            const button = $('edit-save-btn');
+            button.disabled = true;
+            try {
+                const res = await api('/players/update?id=' + encodeURIComponent(editing.id), {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        IP: player.IP || '',
+                        SourceDeviceID: player.SourceDeviceID,
+                        SourceDeviceName: player.SourceDeviceName,
+                        Policy: policy,
+                        Targets: editTargets.map(t => ({ DeviceID: t.deviceId, DeviceName: t.deviceName }))
+                    })
+                });
+                if (res.Success) {
+                    showSuccess('已保存，正在按新配置重新连接');
+                    closeEdit();
+                    playerSignature = '';
+                    await loadPlayers();
+                } else {
+                    showError(res.Message || '保存失败');
+                }
+            } catch (e) {
+                console.error('保存拉取配置失败:', e);
+                showError('保存失败，请重试');
+            } finally {
+                button.disabled = false;
+            }
+        }
+
+        // ---------- 操作：授权 ----------
+
+        async function handleGrantAction(event) {
+            const approveBtn = event.target.closest('.grant-approve');
+            const rejectBtn = event.target.closest('.grant-reject');
+            const deleteBtn = event.target.closest('.grant-delete');
+            if (!approveBtn && !rejectBtn && !deleteBtn) return;
+
+            try {
+                if (deleteBtn) {
+                    const res = await api('/grants/delete?id=' + encodeURIComponent(deleteBtn.dataset.id), { method: 'POST' });
+                    if (res.Success) showSuccess('规则已删除'); else showError(res.Message || '删除失败');
+                } else {
+                    const button = approveBtn || rejectBtn;
+                    const id = button.dataset.id;
+                    const rememberBox = document.querySelector('.grant-remember[data-id="' + id + '"]');
+                    const remember = !!(rememberBox && rememberBox.checked);
+                    const url = '/grants/decide?id=' + encodeURIComponent(id)
+                        + '&approved=' + (approveBtn ? 'true' : 'false')
+                        + '&remember=' + (remember ? 'true' : 'false');
+                    const res = await api(url, { method: 'POST' });
+                    if (res.Success) showSuccess(approveBtn ? '已批准这次拉取' : '已拒绝这次拉取');
+                    else showError(res.Message || '处理失败');
+                }
+            } catch (e) {
+                console.error('处理拉取授权失败:', e);
+                showError('处理失败，请重试');
+            }
+            await loadGrants();
+            await loadClients();
+        }
+
+        async function handleSaveGrant() {
+            const machineId = grantMachineInput.value.trim();
+            const deviceId = grantDeviceSelect.value;
+            const access = grantAccessSelect.value;
+            const deviceName = deviceId ? deviceNameOf(grantDeviceSelect, deviceId) : '';
+            if (!machineId && !deviceId) {
+                showError('机器号与设备不能都留空。要「谁都别拉」请直接改默认档。');
+                return;
+            }
+            grantAddBtn.disabled = true;
+            try {
+                const res = await api('/grants', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        MachineId: machineId,
+                        DeviceId: deviceId,
+                        DeviceName: deviceName,
+                        Access: access
+                    })
+                });
+                if (res.Success) {
+                    showSuccess('规则已保存');
+                    grantMachineInput.value = '';
+                } else {
+                    showError(res.Message || '保存失败');
+                }
+            } catch (e) {
+                console.error('保存授权规则失败:', e);
+                showError('保存失败，请重试');
+            } finally {
+                grantAddBtn.disabled = false;
+            }
+            await loadGrants();
+        }
+
+        async function handleDefaultAccessChange() {
+            const value = grantDefaultSelect.value;
+            try {
+                const res = await api('/grants/default?value=' + encodeURIComponent(value), { method: 'POST' });
+                if (res.Success) showSuccess('默认档已改为「' + value + '」');
+                else showError(res.Message || '修改失败');
+            } catch (e) {
+                console.error('修改默认档失败:', e);
+                showError('修改失败，请重试');
+            }
+            await loadGrants();
+        }
+
+        // ---------- 事件绑定 ----------
+
+        function bindEvents() {
+            // 播放列表：行内按钮用事件委托，重渲染后不必重绑
+            playerListEl.addEventListener('click', (event) => {
+                const control = event.target.closest('.control-btn');
+                if (control) { handleControlClick(control); return; }
+                const edit = event.target.closest('.edit-btn');
+                if (edit) { openEdit(edit.dataset.id); return; }
+                const del = event.target.closest('.delete-btn');
+                if (del) handleDeleteClick(del);
+            });
+            playerListEl.addEventListener('input', (event) => {
+                if (event.target.classList.contains('volume-set')) handleVolumeInput(event.target);
+            });
+
+            // 对方地址变化：换成对端的设备清单
+            const reloadSourceSelect = async () => {
+                const ip = newIpInput.value.trim();
+                if (ip) {
+                    newRemoteDeviceSelect.innerHTML = '<option value="">正在问对方要设备列表…</option>';
+                    try {
+                        await loadRemoteDevices(ip);
+                    } catch (e) {
+                        showError('连不上 ' + ip + '：' + (e.message || '请检查地址、对方是否在运行'));
                     }
-                }, 300);
-            }, 3000);
+                }
+                populateSourceSelect();
+            };
+            newIpInput.addEventListener('blur', reloadSourceSelect);
+            newIpInput.addEventListener('keydown', (event) => {
+                if (event.key === 'Enter') reloadSourceSelect();
+            });
+
+            addPlayerBtn.addEventListener('click', handleAddPlayer);
+            wireTargetPicker(newLocalDeviceList, $('new-target-order'),
+                () => selectedTargets, (next) => { selectedTargets = next; });
+
+            $('confirm-btn').addEventListener('click', handleConfirm);
+            $('cancel-btn').addEventListener('click', () => {
+                currentOperation = null;
+                $('confirm-dialog').classList.add('hidden');
+            });
+
+            grantDefaultSelect.addEventListener('change', handleDefaultAccessChange);
+            grantAddBtn.addEventListener('click', handleSaveGrant);
+            approvalListEl.addEventListener('click', handleGrantAction);
+            grantListEl.addEventListener('click', handleGrantAction);
+
+            $('info-addresses').addEventListener('click', (event) => {
+                const button = event.target.closest('.copy');
+                if (button) copyText(button.dataset.ip, button);
+            });
+
+            logToggle.addEventListener('click', () => {
+                logExpanded = !logExpanded;
+                logBody.classList.toggle('hidden', !logExpanded);
+                logRefresh.classList.toggle('hidden', !logExpanded);
+                logToggle.textContent = logExpanded ? '收起' : '展开';
+                if (logExpanded) loadLogs();
+            });
+            logRefresh.addEventListener('click', loadLogs);
+
+            // 播放设备列表的就地刷新。只重新枚举本机端点——loadDevices 重渲染时会按
+            // selectedTargets 把已勾选的勾回来，勾选顺序也照旧，不会因为刷一下设备就丢配置。
+            $('local-devices-refresh').addEventListener('click', async (event) => {
+                const button = event.currentTarget;
+                button.disabled = true;
+                try {
+                    await loadDevices();
+                    showSuccess('已重新枚举本机播放设备');
+                } catch (e) {
+                    showError('刷新设备失败：' + (e.message || '请检查服务'));
+                } finally {
+                    button.disabled = false;
+                }
+            });
+
+            $('refresh-btn').addEventListener('click', async (event) => {
+                const button = event.currentTarget;
+                button.disabled = true;
+                try {
+                    await loadAll();
+                    showSuccess('已刷新');
+                } catch (e) {
+                    showError('刷新失败：' + (e.message || '请检查服务'));
+                } finally {
+                    button.disabled = false;
+                }
+            });
         }
 
-        // 生成唯一ID
-        function generateId() {
-            return 'player_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+        // ---------- 启动与轮询 ----------
+
+        async function loadAll() {
+            await loadInfo();
+            await loadDevices();
+            await loadPlayers();
+            await loadClients();
+            await loadGrants();
+            if (logExpanded) await loadLogs();
+            setConn(true, '已连接本机服务');
         }
 
-        // 验证IP地址格式
-        function isValidIp(ip) {
-            const ipRegex = /^(\d{1,3}\.){3}\d{1,3}$/;
-            if (!ipRegex.test(ip)) {
-                return false;
+        async function refreshLive() {
+            try {
+                await loadStatuses();
+                updatePlayerStates();
+                await loadClients();
+                await loadGrants();
+            } catch (e) {
+                setConn(false, '连接本机服务失败，正在重试…');
+                return;
             }
-
-            const parts = ip.split('.');
-            return parts.every(part => parseInt(part) >= 0 && parseInt(part) <= 255);
+            setConn(true, '已连接本机服务');
         }
 
-        // 页面加载完成后初始化
+        async function init() {
+            bindEvents();
+            try {
+                await loadAll();
+            } catch (e) {
+                console.error('初始化失败:', e);
+                setConn(false, '连接本机服务失败');
+                showError('初始化失败：' + (e.message || '请检查程序是否在运行'));
+            }
+            // 状态、被拉连接、授权：3 秒一轮，这是最需要「活着」的三样
+            setInterval(refreshLive, 3000);
+            // 配置本身只有本页会改，慢一点就够；拖动音量时不刷，免得打断
+            setInterval(() => { if (!volumeDragging) loadPlayers(); }, 10000);
+            // 日志面板展开时才轮询
+            setInterval(() => { if (logExpanded) loadLogs(); }, 5000);
+        }
+
         document.addEventListener('DOMContentLoaded', init);
     </script>
 </body>

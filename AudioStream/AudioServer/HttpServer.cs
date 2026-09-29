@@ -1,4 +1,4 @@
-﻿
+
 using AudioStream.AudioServer.HttpRoute;
 using Common;
 using EmbedIO;
@@ -14,6 +14,9 @@ namespace AudioStream
     {
         static WebServer webServer = new WebServer();
         static int _port = 12570;
+
+        /// <summary>配置界面监听的端口，供接口对外展示。</summary>
+        public static int Port { get { return _port; } }
         public HttpServer()
         {
             

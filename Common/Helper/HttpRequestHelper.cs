@@ -24,11 +24,15 @@ namespace Common.Helper
         public bool Success { get; set; } = true;
         public ResultError error { get; set; }
     }
+    /// <summary>
+    /// 不带泛型的返回体。
+    /// 这里过去把 Result / Success / error 又声明了一遍，而且 Result 声明成了字段——
+    /// JSON 只认属性，字段根本不出现，于是凡是用 <c>new HttpResult { Result = ... }</c> 的接口
+    /// （add_player / play / volume / pause / del）返回出去的 body 里压根没有 Result，界面永远看不到结果。
+    /// 现在一律沿用基类的属性。
+    /// </summary>
     public class HttpResult: HttpResult<Object>
     {
-        public Object Result = null;
-        public bool Success { get; set; } = true;
-        public ResultError error { get; set; }
     }
     public class HttpRequestHelper
     {

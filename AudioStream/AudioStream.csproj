@@ -28,7 +28,7 @@
     <PublisherName>yiyiooo</PublisherName>
     <OpenBrowserOnPublish>false</OpenBrowserOnPublish>
     <ApplicationRevision>37</ApplicationRevision>
-    <ApplicationVersion>1.0.0.%2a</ApplicationVersion>
+    <ApplicationVersion>2.0.1.%2a</ApplicationVersion>
     <UseApplicationTrust>false</UseApplicationTrust>
     <PublishWizardCompleted>true</PublishWizardCompleted>
     <BootstrapperEnabled>true</BootstrapperEnabled>
@@ -62,21 +62,13 @@
     <AssemblyOriginatorKeyFile>
     </AssemblyOriginatorKeyFile>
   </PropertyGroup>
-  <PropertyGroup>
-    <ManifestCertificateThumbprint>55F3114D9EBCB96EB12FC2A683126CD7E9E636BF</ManifestCertificateThumbprint>
-  </PropertyGroup>
-  <PropertyGroup>
-    <ManifestKeyFile>AudioStream_TemporaryKey.pfx</ManifestKeyFile>
-  </PropertyGroup>
-  <PropertyGroup>
-    <GenerateManifests>true</GenerateManifests>
-  </PropertyGroup>
-  <PropertyGroup>
-    <SignManifests>true</SignManifests>
-  </PropertyGroup>
-  <PropertyGroup>
-    <TargetZone>LocalIntranet</TargetZone>
-  </PropertyGroup>
+  <!--
+    ClickOnce 的清单生成与 PFX 签名属性（ManifestCertificateThumbprint、ManifestKeyFile、
+    GenerateManifests、SignManifests、TargetZone）已移除：.NET Core 版 MSBuild（dotnet build）
+    不支持 GenerateTrustInfo 与 PFX 签名，留着会让构建直接失败。
+    本项目的交付形态是「一个 exe 解压即用」，不依赖 ClickOnce 发布；
+    exe 的 Win32 清单仍由下方的 ApplicationManifest 嵌入，UAC 行为不变。
+  -->
   <PropertyGroup>
     <ApplicationManifest>Properties\app.manifest</ApplicationManifest>
   </PropertyGroup>
@@ -110,18 +102,33 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="AudioServer\AudioFraming.cs" />
     <Compile Include="AudioServer\HttpRoute\DefaultController.cs" />
     <Compile Include="AudioServer\IPlayerRedirector.cs" />
     <Compile Include="AudioServer\Model\ClientItem.cs" />
     <Compile Include="AudioServer\Model\DeviceInfo.cs" />
+    <Compile Include="AudioServer\Model\AudioBroadcastBuffer.cs" />
     <Compile Include="AudioServer\Model\LimitedBuffer.cs" />
     <Compile Include="AudioServer\Model\PlayerInfo.cs" />
+    <Compile Include="AudioServer\Model\PlayerRequest.cs" />
+    <Compile Include="AudioServer\Model\PlayerView.cs" />
+    <Compile Include="AudioServer\Model\PlayTarget.cs" />
+    <Compile Include="AudioServer\Model\PlaybackPolicy.cs" />
+    <Compile Include="AudioServer\Model\PlaybackQuality.cs" />
+    <Compile Include="AudioServer\Model\PlayerStatus.cs" />
+    <Compile Include="AudioServer\Model\PullApprovalView.cs" />
+    <Compile Include="AudioServer\Model\PullGrant.cs" />
     <Compile Include="AudioServer\NetAudioRedirector.cs" />
+    <Compile Include="AudioServer\PlaybackDeviceException.cs" />
     <Compile Include="AudioServer\Player.cs" />
     <Compile Include="AudioServer\HttpServer.cs" />
+    <Compile Include="AudioServer\PlaybackGroup.cs" />
     <Compile Include="AudioServer\PlayerControl.cs" />
     <Compile Include="AudioServer\TcpAudioServer.cs" />
     <Compile Include="AudioServer\LocalAudioRedirector.cs" />
+    <Compile Include="AudioServer\MachineIdentity.cs" />
+    <Compile Include="AudioServer\PullApprovalCenter.cs" />
+    <Compile Include="AudioServer\PullAuthorization.cs" />
     <Compile Include="AudioStream.cs">
       <SubType>Form</SubType>
     </Compile>
@@ -132,6 +139,7 @@
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="AudioServer\TcpServer.cs" />
+    <Compile Include="AudioServer\SharedCapture.cs" />
     <EmbeddedResource Include="AudioStream.resx">
       <DependentUpon>AudioStream.cs</DependentUpon>
     </EmbeddedResource>

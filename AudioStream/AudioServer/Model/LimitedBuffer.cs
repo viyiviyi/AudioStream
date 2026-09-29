@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -6,6 +6,10 @@ namespace AudioStream.AudioServer.Model
 {
     /// <summary>
     /// 带大小限制的BUff
+    ///
+    /// 只有一对读写游标，一路数据只能被一个消费者取走。
+    /// 音频通路已经改用 <see cref="AudioBroadcastBuffer"/>（每个播放设备一份游标），
+    /// 这个类不再参与播放，留着只为少动历史文件。
     /// </summary>
     public class LimitedBuffer
     {
