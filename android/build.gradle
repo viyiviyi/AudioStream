@@ -1,5 +1,0 @@
-// 顶层构建脚本：只声明插件版本，具体配置在 app/build.gradle。
-// AGP 版本与同工作区其它 Android 工程一致，共用同一份 Gradle 缓存（离线可解析）。
-plugins {
-    id 'com.android.application' version '8.5.2' apply false
-}

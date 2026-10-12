@@ -14,3 +14,6 @@ AudioStreamSetup/Release/
 
 # 发布产物（由 build.ps1 -Pack 生成，不入库）
 dist/
+
+# 安卓端不跟 PC 端放在同一个仓库里管理
+android/
