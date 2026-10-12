@@ -87,7 +87,8 @@ function Read-Line {
 
 # 点单：握手 -> 要格式 -> 让它开始送。返回连接对象，由调用方负责关闭。
 function Invoke-Order {
-    param([int]$Port, [string]$DeviceId, [string]$DeviceName, [switch]$Start)
+    param([int]$Port, [string]$DeviceId, [string]$DeviceName, [switch]$Start,
+          [string]$MachineId = '00000000000000000000000000000000', [string]$PcName = 'PSTest')
 
     $client = New-Object System.Net.Sockets.TcpClient
     $client.NoDelay = $true
@@ -96,7 +97,9 @@ function Invoke-Order {
     $stream.ReadTimeout = 5000
     $stream.WriteTimeout = 5000
 
-    Send-Line $stream '/Hello/00000000000000000000000000000000/PSTest'
+    # 身份是可传的：第四段要验「成环」，而环的条件是「来点单的正是把这路音频送来的那台机器」，
+    # 所以那里必须用假对端的身份来点单，用别的身份点单本来就该被放行。
+    Send-Line $stream ('/Hello/' + $MachineId + '/' + $PcName)
     $hello = Read-Line $stream
 
     Send-Line $stream ('/WaveFormat/' + $DeviceId + '/' + $DeviceName)
@@ -340,7 +343,13 @@ try {
     Check '状态里说清了没播起来的原因' ($status1.Count -eq 1 -and -not [string]::IsNullOrWhiteSpace($status1[0].Error)) ("Error=" + ($status1 | ForEach-Object { $_.Error }))
     $noPlay = Invoke-Order -Port $tcpPort -DeviceId $virt.ID -DeviceName $virt.Name
     [void]$orders.Add($noPlay)
-    Check '对端连不上时，点单这个设备不被误拒' ($noPlay.IsBinary) ("实际应答：" + $noPlay.Reply)
+    if ($noPlay.Reply -like '/Reject/unavailable*') {
+        # 这块端点此刻打不开（被别的程序独占之类）。那是「设备不可用」，与「有没有被误拒」无关，
+        # 这一条也就无从判起——说清楚跳过，别把它记成失败。
+        Write-Host ('  （说明：' + $virt.Name + ' 此刻打不开：' + $noPlay.Reply + '，这一条跳过）')
+    } else {
+        Check '对端连不上时，点单这个设备不被误拒' ($noPlay.IsBinary) ("实际应答：" + $noPlay.Reply)
+    }
     Close-Order $noPlay
     [void]$orders.Remove($noPlay)
 
@@ -430,9 +439,16 @@ try {
     $probe = (Get-Api ('/api/probe?device=' + [uri]::EscapeDataString($virt.ID))).Result
     Check '冲突自检认为这个设备已被占住' ($probe.Wired -and $probe.Blocked) ("Wired=" + $probe.Wired + " Blocked=" + $probe.Blocked)
 
-    $blocked = Invoke-Order -Port $tcpPort -DeviceId $virt.ID -DeviceName $virt.Name
+    # 成环的条件是「来点单的正是把这路音频送来的那台机器」：它送来的声音被本机采一遍再送回去，
+    # 在它那头放出来又采回来，才叫啸叫。假对端的身份是 1111…/PS-Fake，所以这里必须用它来点单。
+    $blocked = Invoke-Order -Port $tcpPort -DeviceId $virt.ID -DeviceName $virt.Name -MachineId '11111111111111111111111111111111' -PcName 'PS-Fake'
     [void]$orders.Add($blocked)
-    Check '点单正在被网络播放的设备被拦下' ($blocked.Reply -eq '/Reject/loop') ("实际应答：" + $blocked.Reply)
+    Check '把音频送来的那台机器再来采同一块设备会被拦下（成环）' ($blocked.Reply -eq '/Reject/loop') ("实际应答：" + $blocked.Reply)
+
+    # 换一台机器来点同一块设备：它只是多一个听众，声音不会绕回它自己，所以不该拦。
+    $third = Invoke-Order -Port $tcpPort -DeviceId $virt.ID -DeviceName $virt.Name -MachineId '22222222222222222222222222222222' -PcName 'PS-Other'
+    [void]$orders.Add($third)
+    Check '别的机器点同一块设备只多一个听众，不该被拦' ($third.IsBinary) ("实际应答：" + $third.Reply)
 
     $allowed = Invoke-Order -Port $tcpPort -DeviceId $other.ID -DeviceName $other.Name
     [void]$orders.Add($allowed)

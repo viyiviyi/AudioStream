@@ -66,19 +66,20 @@ const PAGE_SCRIPT = `(async () => {
   const select = $('new-remote-device');
   await waitFor(() => select.options.length > 0, 15000);
 
-  // ---- 1. 下拉里的两个跟随项 ----
+  // ---- 1. 两个跟随项：不单独成组，各自排在自己那一组的第一条 ----
   const groups = Array.from(select.querySelectorAll('optgroup'));
-  const follow = groups.find(g => (g.label || '').indexOf('跟随系统默认') >= 0);
-  add('来源下拉里有「跟随系统默认」分组', !!follow, follow ? follow.label : groups.map(g => g.label).join(' / '));
-  add('分组排在真实设备分组之前', !!follow && groups[0] === follow && select.firstElementChild === follow,
-      '第一个子元素是分组：' + (select.firstElementChild && select.firstElementChild.tagName));
-
-  const items = follow ? Array.from(follow.querySelectorAll('option')) : [];
-  add('分组里正好两项', items.length === 2, items.map(o => o.value).join('、'));
-  const defOut = items.find(o => o.value === 'default');
-  const defIn = items.find(o => o.value === 'default-input');
-  add('有系统默认输出设备项', !!defOut, defOut ? defOut.textContent : '');
-  add('有系统默认输入设备项', !!defIn, defIn ? defIn.textContent : '');
+  add('没有单独的「跟随系统默认」分组', !groups.some(g => (g.label || '').indexOf('跟随系统默认') >= 0),
+      groups.map(g => g.label).join(' / '));
+  const outGroup = groups.find(g => (g.label || '').indexOf('输出设备') === 0);
+  const inGroup = groups.find(g => (g.label || '').indexOf('输入设备') === 0);
+  add('有输出设备分组', !!outGroup, groups.map(g => g.label).join(' / '));
+  add('有输入设备分组', !!inGroup, groups.map(g => g.label).join(' / '));
+  const defOut = outGroup ? outGroup.querySelector('option') : null;
+  const defIn = inGroup ? inGroup.querySelector('option') : null;
+  add('输出分组的第一条是系统默认输出设备', !!defOut && defOut.value === 'default',
+      defOut ? (defOut.value + ' / ' + defOut.textContent) : '没有输出分组');
+  add('输入分组的第一条是系统默认输入设备', !!defIn && defIn.value === 'default-input',
+      defIn ? (defIn.value + ' / ' + defIn.textContent) : '没有输入分组');
   add('两项带可读的中文名字', !!defOut && defOut.dataset.name === '系统默认输出设备'
       && !!defIn && defIn.dataset.name === '系统默认输入设备',
       (defOut ? defOut.dataset.name : '') + ' / ' + (defIn ? defIn.dataset.name : ''));
@@ -107,12 +108,14 @@ const PAGE_SCRIPT = `(async () => {
   if (target) target.click();
   await sleep(200);
 
-  const before = (await players()).length;
+  const beforeIds = new Set((await players()).map(p => p.ID));
   $('add-player-btn').click();
-  const created = await waitFor(async () => (await players()).some(p => p.SourceDeviceID === 'default-input'), 15000);
+  const created = await waitFor(async () => (await players()).some(p => !beforeIds.has(p.ID)), 15000);
   const list = await players();
-  const mine = list.find(p => p.SourceDeviceID === 'default-input');
-  add('点添加后真的建起了这条拉取', created, '拉取数 ' + before + ' → ' + list.length);
+  // 只认「这次新加出来的那一条」。不能按来源设备号去找：机器上本来就有一条同样来源的记录时，
+  // find 会认到用户那一条，收尾时就把用户自己的记录删掉了——这个坑真踩过一次，删掉过一条真记录。
+  const mine = list.find(p => !beforeIds.has(p.ID));
+  add('点添加后真的建起了这条拉取', created, '拉取数 ' + beforeIds.size + ' → ' + list.length);
   add('落盘的来源设备号是 default-input', !!mine, mine ? mine.SourceDeviceID : '没找到');
   add('落盘的来源名字是「系统默认输入设备」', !!mine && mine.SourceDeviceName === '系统默认输入设备',
       mine ? String(mine.SourceDeviceName) : '');
@@ -122,8 +125,8 @@ const PAGE_SCRIPT = `(async () => {
   if (mine) {
     await fetch('/api/del?id=' + encodeURIComponent(mine.ID), { method: 'POST' });
   }
-  const cleaned = await waitFor(async () => !(await players()).some(p => p.SourceDeviceID === 'default-input'), 10000);
-  add('收尾把测试拉取删干净了', cleaned, '剩余拉取 ' + (await players()).length + ' 条');
+  const cleaned = await waitFor(async () => (await players()).length <= beforeIds.size, 10000);
+  add('收尾把测试拉取删干净了', cleaned, '剩余拉取 ' + (await players()).length + ' 条（跑之前 ' + beforeIds.size + ' 条）');
 
   // ---- 4. 换来源时不该把这个选择弄丢 ----
   select.value = 'default';

@@ -76,9 +76,17 @@ function New-PlayerBody([string]$policy, $targets, [string]$source, [string]$nam
     }
 }
 
-function New-Player($body) {
+# 请求体一律先转成 UTF-8 字节再发。
+# PowerShell 5.1 的 Invoke-RestMethod 拿到字符串请求体时按本地代码页编码，
+# 中文设备名会变成一串问号——「改完来源设备名落到了列表里」这一条就是这么假失败过一次。
+function Send-Json([string]$url, $body) {
     $json = $body | ConvertTo-Json -Depth 8
-    return Invoke-RestMethod "$httpBase/api/players" -Method Post -ContentType 'application/json' -Body $json -TimeoutSec 10
+    $bytes = [System.Text.Encoding]::UTF8.GetBytes($json)
+    return Invoke-RestMethod $url -Method Post -ContentType 'application/json; charset=utf-8' -Body $bytes -TimeoutSec 10
+}
+
+function New-Player($body) {
+    return Send-Json "$httpBase/api/players" $body
 }
 
 function TargetSpec([string]$id, [string]$name) {
@@ -162,13 +170,34 @@ try {
     $players = @(Get-Players)
     $first = $players[0]
     $body = New-PlayerBody 'Failover' @((TargetSpec $targetB '虚构设备B'), (TargetSpec $targetC '虚构设备C')) $sourceId $sourceName
-    $json = $body | ConvertTo-Json -Depth 8
-    $reply = Invoke-RestMethod "$httpBase/api/players/update?id=$($first.ID)" -Method Post -ContentType 'application/json' -Body $json -TimeoutSec 10
+    $reply = Send-Json "$httpBase/api/players/update?id=$($first.ID)" $body
     Write-Check '改策略与目标返回成功' ([bool]$reply.Success) ("Success=" + $reply.Success + " Message=" + $reply.Message)
     Start-Sleep -Milliseconds 300
     $updated = @(Get-Players | Where-Object { $_.ID -eq $first.ID })
     Write-Check '改完策略落到了列表里' ((@($updated).Count -eq 1) -and ($updated[0].Policy -eq 'Failover')) ("Policy=" + @($updated)[0].Policy)
     Write-Check '改完目标是新的那两块' ((@($updated[0].Targets).Count -eq 2) -and (@($updated[0].Targets)[0].DeviceID -eq $targetB) -and (@($updated[0].Targets)[1].DeviceID -eq $targetC)) ("目标=" + (@($updated[0].Targets) | ForEach-Object { $_.DeviceID }) -join ',')
+
+    # ---- 第五段之二：编辑时连来源设备一起改（来源地址不变） ----
+    # 编辑面板现在能换来源设备。换的是「拉对方哪一块设备」，不是「拉哪一台机器」：
+    # 地址栏在编辑面板里根本不出现，要换机器就另外加一条。
+    $editSourceId = '{0.0.0.00000000}.{aaaaaaaa-0000-0000-0000-0000000000ff}'
+    $editSourceName = '编辑换上的虚构来源'
+    $body = New-PlayerBody 'Failover' @((TargetSpec $targetB '虚构设备B'), (TargetSpec $targetC '虚构设备C')) $editSourceId $editSourceName
+    $reply = Send-Json "$httpBase/api/players/update?id=$($first.ID)" $body
+    Write-Check '改来源设备返回成功' ([bool]$reply.Success) ("Success=" + $reply.Success + " Message=" + $reply.Message)
+    # 等它真的落到列表里再断言。改完这一路会按新来源重连一次，固定 sleep 一个值会偶发读到旧值
+    # （「改完来源设备号/名字落到了列表里」这两条就这么假失败过一次）。
+    $after = @()
+    for ($i = 0; $i -lt 25; $i++) {
+        Start-Sleep -Milliseconds 200
+        $after = @(Get-Players | Where-Object { $_.ID -eq $first.ID -and $_.SourceDeviceID -eq $editSourceId })
+        if ($after.Count -eq 1) { break }
+    }
+    if ($after.Count -eq 0) { $after = @(Get-Players | Where-Object { $_.ID -eq $first.ID }) }
+    Write-Check '改完来源设备号落到了列表里' ((@($after).Count -eq 1) -and ($after[0].SourceDeviceID -eq $editSourceId)) ("SourceDeviceID=" + $(if (@($after).Count -eq 1) { $after[0].SourceDeviceID } else { '<没找到>' }))
+    Write-Check '改完来源设备名落到了列表里' ((@($after).Count -eq 1) -and ($after[0].SourceDeviceName -eq $editSourceName)) ("SourceDeviceName=" + $(if (@($after).Count -eq 1) { $after[0].SourceDeviceName } else { '<没找到>' }))
+    Write-Check '改来源设备时来源地址没被改' ((@($after).Count -eq 1) -and ($after[0].IP -eq $first.IP)) ("IP=" + $(if (@($after).Count -eq 1) { '[' + $after[0].IP + ']' } else { '<没找到>' }) + " 原=[" + $first.IP + "]")
+    Write-Check '改来源设备不影响策略与播放目标' ((@($after).Count -eq 1) -and ($after[0].Policy -eq 'Failover') -and (@($after[0].Targets).Count -eq 2)) ("Policy=" + $(if (@($after).Count -eq 1) { $after[0].Policy } else { '<没找到>' }) + " 目标数=" + $(if (@($after).Count -eq 1) { @($after[0].Targets).Count } else { 0 }))
 
     # ---- 第六段：状态接口要能看出「配了但没响」以及为什么 ----
     Start-Sleep -Milliseconds 600
