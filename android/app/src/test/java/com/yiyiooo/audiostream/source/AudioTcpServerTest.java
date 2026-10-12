@@ -154,6 +154,8 @@ public class AudioTcpServerTest {
 
         private final AudioSource source;
         private volatile SourceUnavailableException failure;
+        /** 内录那一路。为 null 表示「用户还没点过内录授权」——手机上的默认状态。 */
+        private volatile AudioSource capture;
 
         FakeProvider(AudioSource source) {
             this.source = source;
@@ -163,11 +165,28 @@ public class AudioTcpServerTest {
             failure = new SourceUnavailableException(reason, message);
         }
 
+        /** 假装用户已经在系统弹框里点了同意。 */
+        void grantCapture(AudioSource captureSource) {
+            capture = captureSource;
+        }
+
         @Override
         public AudioSource microphone() throws SourceUnavailableException {
             SourceUnavailableException failed = failure;
             if (failed != null) throw failed;
             return source;
+        }
+
+        @Override
+        public AudioSource playbackCapture() throws SourceUnavailableException {
+            SourceUnavailableException failed = failure;
+            if (failed != null) throw failed;
+            AudioSource granted = capture;
+            if (granted == null) {
+                throw new SourceUnavailableException(SourceUnavailableException.DENIED,
+                        "手机还没有允许内录，请在手机上点「允许内录」，并在系统弹框里同意");
+            }
+            return granted;
         }
     }
 
@@ -301,13 +320,16 @@ public class AudioTcpServerTest {
         AudioTcpServer server = new AudioTcpServer(SERVER_ID, SERVER_NAME, new FakeProvider(source), 0, 1);
         int port = server.start();
         try {
-            // default 是「对方此刻的系统默认输出」，也就是环回采集——手机端没有这一类
+            // default 现在归内录（手机正在放的声音），不再是「手机没有这类设备」，
+            // 所以这里换一个真正不存在的设备号来走 nodevice
             String reply = talk(port,
                     "/Hello/" + PC_ID + "/测试电脑",
-                    "/WaveFormat/default/对方默认扬声器");
+                    "/WaveFormat/speaker:0/对方扬声器");
             assertReject(reply, "nodevice");
             // 第 4 段要带上能看懂的原因（URL 转义过），并说清手机这边有什么
-            assertTrue("拒绝原因里没提到麦克风：" + reply, unescape(reply).contains("麦克风"));
+            String reason = unescape(reply);
+            assertTrue("拒绝原因里没提到内录：" + reply, reason.contains("内录"));
+            assertTrue("拒绝原因里没提到麦克风：" + reply, reason.contains("麦克风"));
         } finally {
             server.close();
             source.close();
@@ -330,6 +352,60 @@ public class AudioTcpServerTest {
         } finally {
             server.close();
             source.close();
+        }
+    }
+
+    @Test
+    public void 点单内录但没授权时回Reject_denied并指明去点允许内录() throws Exception {
+        FakeSource source = new FakeSource(FRAME_BYTES);
+        // FakeProvider 默认没内录授权，正是手机刚装好的状态
+        AudioTcpServer server = new AudioTcpServer(SERVER_ID, SERVER_NAME, new FakeProvider(source), 0, 1);
+        int port = server.start();
+        try {
+            String reply = talk(port,
+                    "/Hello/" + PC_ID + "/测试电脑",
+                    "/WaveFormat/capture:default/手机内录");
+            assertReject(reply, "denied");
+            // 协议原因与麦克风那条同为 denied，但**提示语必须不同**：
+            // 一个要去系统设置里给权限，一个要在本应用里点一下再在系统弹框里同意。
+            // 提示语错了，用户就会去改错的地方
+            assertTrue("没把「去点允许内录」说清楚：" + reply, unescape(reply).contains("允许内录"));
+        } finally {
+            server.close();
+            source.close();
+        }
+    }
+
+    @Test
+    public void 授权后点单内录能拿到格式帧与音频并且不碰麦克风() throws Exception {
+        FakeSource mic = new FakeSource(FRAME_BYTES);
+        FakeSource capture = new FakeSource(FRAME_BYTES);
+        FakeProvider provider = new FakeProvider(mic);
+        provider.grantCapture(capture);
+        AudioTcpServer server = new AudioTcpServer(SERVER_ID, SERVER_NAME, provider, 0, 1);
+        int port = server.start();
+        PullSession pull = null;
+        try {
+            Recorder recorder = new Recorder();
+            pull = new PullSession("127.0.0.1", port, "capture:default", "手机内录",
+                    PC_ID, "测试电脑", recorder);
+            pull.start();
+
+            assertTrue("5 秒内没拿到内录的音频格式，状态：" + recorder.lastState + " " + recorder.lastDetail,
+                    recorder.awaitFormat(5000));
+            assertNotNull(recorder.format);
+            assertEquals(48000, recorder.format.sampleRate);
+            assertEquals(AudioEncoding.PCM, recorder.format.encoding);
+
+            assertTrue("5 秒内没收到内录的音频帧", recorder.awaitAudio(5000));
+            // 这条才是「点的是内录」的证据：拉取方挂在内录那一路，而不是顺手把麦克风给了它
+            assertEquals("订阅者应当挂在内录那一路", 1, capture.sinkCount());
+            assertEquals("麦克风那一路不该被拉起来", 0, mic.sinkCount());
+        } finally {
+            if (pull != null) pull.close();
+            server.close();
+            mic.close();
+            capture.close();
         }
     }
 

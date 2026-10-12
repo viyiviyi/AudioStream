@@ -11,7 +11,7 @@ public final class SourceDevice {
     /** 采集类来源（麦克风、内录）。 */
     public static final String FLOW_INPUT = "input";
 
-    /** 播放类来源（对方机器正在放的声音，环回采集）。手机端目前没有这一类。 */
+    /** 播放类来源（这台机器正在放的声音，环回/内录采集）。手机端对应的是内录。 */
     public static final String FLOW_OUTPUT = "output";
 
     /** 「跟随对方此刻的系统默认输入设备」这个特殊设备号，与 PC 端同一个字面量。 */
@@ -50,5 +50,10 @@ public final class SourceDevice {
 
     public boolean isInput() {
         return FLOW_INPUT.equals(flow);
+    }
+
+    /** 输出类来源（这台机器正在放的声音）。PC 端配置页按它把条目分到「输出」那一组。 */
+    public boolean isOutput() {
+        return FLOW_OUTPUT.equals(flow);
     }
 }

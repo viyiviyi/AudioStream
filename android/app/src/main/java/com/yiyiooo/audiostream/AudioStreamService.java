@@ -26,7 +26,8 @@ import com.yiyiooo.audiostream.player.PlaybackSession;
 import com.yiyiooo.audiostream.protocol.AudioFormat;
 import com.yiyiooo.audiostream.pull.PullSession;
 import com.yiyiooo.audiostream.pull.PullState;
-import com.yiyiooo.audiostream.source.MicrophoneSourceProvider;
+import com.yiyiooo.audiostream.source.CaptureGrant;
+import com.yiyiooo.audiostream.source.DeviceSourceProvider;
 import com.yiyiooo.audiostream.source.SourceServer;
 
 import java.util.List;
@@ -101,7 +102,12 @@ public final class AudioStreamService extends Service {
     private volatile Listener listener;
 
     // --- 来源端（手机当音源，让 PC 反过来拉）---
-    private MicrophoneSourceProvider micProvider;
+    /**
+     * 来源提供者。它跟着**服务**的寿命走，不跟着来源端的开关走：
+     * 内录授权是「用户在系统弹框里点过一次同意」的状态，不能因为用户把来源端关了再开就丢掉
+     * ——那意味着每开一次都要重新弹一次系统框。
+     */
+    private DeviceSourceProvider sourceProvider;
     private volatile SourceServer sourceServer;
     /**
      * 已经生效的前台服务类型；0 表示还没进过前台。
@@ -133,6 +139,7 @@ public final class AudioStreamService extends Service {
             channel.setDescription("显示当前播放状态");
             notificationManager.createNotificationChannel(channel);
         }
+        sourceProvider = new DeviceSourceProvider(this);
         Log.i(TAG, "服务已创建");
     }
 
@@ -158,6 +165,10 @@ public final class AudioStreamService extends Service {
         executor.shutdownNow();
         cleanup();
         closeSourceQuietly();
+        DeviceSourceProvider provider = sourceProvider;
+        sourceProvider = null;
+        // 两路采集与内录通道一起交还系统
+        if (provider != null) provider.release();
         super.onDestroy();
     }
 
@@ -257,19 +268,23 @@ public final class AudioStreamService extends Service {
      */
     public String startSource() {
         if (sourceServer != null) return null;
-        if (!hasRecordPermission()) {
-            return "还没允许录音：先给「录音」权限，否则手机发不出声音。";
+        // 麦克风与内录至少要有一个能出声，否则开了也白开。
+        // 刻意不在「没录音权限」时直接拒绝：只想用内录的用户不该被逼着先给录音权限，
+        // 而真去点麦克风那一路时协议会回 denied 并把原因写清楚。
+        if (!hasRecordPermission() && !hasCaptureGrant()) {
+            return "还没有声音可送：先给「录音」权限，或者在手机上点一次「允许内录」。";
         }
-        MicrophoneSourceProvider provider = new MicrophoneSourceProvider(this);
+        DeviceSourceProvider provider = sourceProvider;
+        if (provider == null) {
+            return "服务状态异常，请关掉 AudioStream 重新打开。";
+        }
         SourceServer server = new SourceServer(provider, identity.id(), identity.name(),
                 BuildConfig.VERSION_NAME, SourceServer.HTTP_PORT);
         String error = server.start();
         if (error != null) {
-            provider.release();
             Log.w(TAG, "来源端起不来：" + error);
             return error;
         }
-        micProvider = provider;
         sourceServer = server;
         syncForeground();
         Log.i(TAG, "来源端已开启：" + server.statusLine());
@@ -311,6 +326,43 @@ public final class AudioStreamService extends Service {
                 com.yiyiooo.audiostream.source.LocalAddresses.list());
     }
 
+    // ---------- 内录（手机上正在放的声音） ----------
+
+    /**
+     * 用户在系统弹框里点完同意之后，把那份授权收下来。
+     *
+     * 这里必须**先**把前台服务类型补上 mediaProjection 再返回：Android 14 起，
+     * 没以这个类型进前台就去取 MediaProjection，系统会直接拒绝——而那时用户刚点完同意，
+     * 屏幕上却什么都没发生，是最难向用户解释的一种失败。
+     */
+    public void setCaptureGrant(int resultCode, Intent data) {
+        DeviceSourceProvider provider = sourceProvider;
+        if (provider == null) {
+            Log.w(TAG, "收到内录授权时服务状态异常，丢弃这次授权");
+            return;
+        }
+        provider.setGrant(new CaptureGrant(resultCode, data));
+        syncForeground();
+        Log.i(TAG, "收到内录授权：resultCode=" + resultCode
+                + "，可用=" + provider.hasCaptureGrant());
+    }
+
+    /** 本次进程里用户点过内录授权没有。注意它不代表「以后也一直有效」。 */
+    public boolean hasCaptureGrant() {
+        DeviceSourceProvider provider = sourceProvider;
+        return provider != null && provider.hasCaptureGrant();
+    }
+
+    /** 界面上那行内录状态。 */
+    public String captureStatusLine() {
+        DeviceSourceProvider provider = sourceProvider;
+        if (provider == null) return "内录：服务未就绪";
+        if (!provider.hasCaptureGrant()) {
+            return "内录：未授权 —— 点下面的按钮，并在系统弹框里同意";
+        }
+        return provider.isCaptureOpen() ? "内录：已授权（PC 端可以拉）" : "内录：已授权";
+    }
+
     /** 停来源端但不碰前台服务——服务正在销毁时不能再去 startForeground。 */
     private void closeSourceQuietly() {
         SourceServer server = sourceServer;
@@ -322,9 +374,9 @@ public final class AudioStreamService extends Service {
                 Log.w(TAG, "停来源端出错：" + e);
             }
         }
-        MicrophoneSourceProvider provider = micProvider;
-        micProvider = null;
-        if (provider != null) provider.release();
+        // 只停采集，不丢内录授权：用户关掉来源端再打开时不该被要求重新点一次系统弹框
+        DeviceSourceProvider provider = sourceProvider;
+        if (provider != null) provider.stopSources();
     }
 
     // ========== 内部 ==========
@@ -511,6 +563,11 @@ public final class AudioStreamService extends Service {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
                 && sourceServer != null && hasRecordPermission()) {
             types |= ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE;
+        }
+        // mediaProjection 与内录同版本（API 29）。它不由「来源端开着」决定，而由「用户点过授权」决定：
+        // 类型要在取 MediaProjection 之前就已经生效，而取的那一刻可能就是第一次点单。
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && hasCaptureGrant()) {
+            types |= ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION;
         }
         return types;
     }

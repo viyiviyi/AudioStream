@@ -85,8 +85,10 @@ android {
                 systemProperty 'robolectric.dependency.repo.id', 'aliyun'
                 systemProperty 'robolectric.logging.enabled', 'false'
 
-                // 联调测试要连的真实 AudioStream 地址由 tools/verify-e2e.ps1 传进来；
-                // 不传时测试自己会跳过并说明原因，不会拿假对端顶替。
+                // 这几项是 JVM 单元测试里那几条联调用例的入参，用 -Das.host=… 从命令行传进来；
+                // 不传时用例自己会跳过并说明原因，不会拿假对端顶替。
+                // 真机用例不用它们——它走 instrumentation 参数，两种传法不是一回事，
+                // 见 PullPlaybackIntegrationTest 的类注释。
                 systemProperty 'as.host', System.getProperty('as.host', '')
                 systemProperty 'as.httpPort', System.getProperty('as.httpPort', '')
                 systemProperty 'as.tcpPort', System.getProperty('as.tcpPort', '')

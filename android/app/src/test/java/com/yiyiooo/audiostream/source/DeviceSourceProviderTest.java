@@ -1,9 +1,11 @@
 package com.yiyiooo.audiostream.source;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNotSame;
 import static org.junit.Assert.assertSame;
+import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 import android.Manifest;
@@ -22,15 +24,18 @@ import org.robolectric.Shadows;
 import org.robolectric.annotation.Config;
 
 /**
- * 麦克风来源的提供者。用 Robolectric 在 JVM 上跑，AudioRecord 是它的 shadow 实现——
- * 这里验的不是「采到的声音好不好」，而是三条在真机上出错就很难查的事：
- * 没权限时协议原因是 {@code denied}、格式报得对不对、多台电脑来拉时是不是同一份。
+ * 手机本机来源的提供者（内录 + 麦克风）。用 Robolectric 在 JVM 上跑，AudioRecord 是它的 shadow 实现。
  *
- * 真实采集质量只能靠真机联调（任务 t-mv55g2ub9），JVM 上验不了。
+ * 这里验的不是「采到的声音好不好」，而是几条在真机上出错就很难查的事：没权限/没授权时协议原因
+ * 是 {@code denied} 还是 {@code unavailable}（PC 端要靠它决定提示语）、格式报得对不对、
+ * 多台电脑来拉时是不是同一份。
+ *
+ * 真实采集与内录授权只能靠真机（任务 t-mv55g2ub9 与 t-mv55g2uba 的遗留项），JVM 上验不了：
+ * 系统那个「是否允许内录」的弹框在这一层根本不存在。
  */
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = 31)
-public class MicrophoneSourceProviderTest {
+public class DeviceSourceProviderTest {
 
     private static Context app() {
         return RuntimeEnvironment.getApplication();
@@ -45,10 +50,12 @@ public class MicrophoneSourceProviderTest {
         }
     }
 
+    // ========== 麦克风 ==========
+
     @Test
     public void 没有录音权限时报_denied_而不是_unavailable() {
         grant(false);
-        MicrophoneSourceProvider provider = new MicrophoneSourceProvider(app());
+        DeviceSourceProvider provider = new DeviceSourceProvider(app());
 
         try {
             provider.microphone();
@@ -64,7 +71,7 @@ public class MicrophoneSourceProviderTest {
     @Test
     public void 有权限时给出_48kHz_16位单声道_PCM() throws Exception {
         grant(true);
-        MicrophoneSourceProvider provider = new MicrophoneSourceProvider(app());
+        DeviceSourceProvider provider = new DeviceSourceProvider(app());
 
         AudioSource source = provider.microphone();
         AudioFormat format = source.format();
@@ -84,7 +91,7 @@ public class MicrophoneSourceProviderTest {
     @Test
     public void 多台电脑来拉时共用同一路采集() throws Exception {
         grant(true);
-        MicrophoneSourceProvider provider = new MicrophoneSourceProvider(app());
+        DeviceSourceProvider provider = new DeviceSourceProvider(app());
 
         AudioSource first = provider.microphone();
         AudioSource second = provider.microphone();
@@ -97,7 +104,7 @@ public class MicrophoneSourceProviderTest {
     @Test
     public void release_之后重新建一个() throws Exception {
         grant(true);
-        MicrophoneSourceProvider provider = new MicrophoneSourceProvider(app());
+        DeviceSourceProvider provider = new DeviceSourceProvider(app());
 
         AudioSource first = provider.microphone();
         provider.release();
@@ -110,14 +117,12 @@ public class MicrophoneSourceProviderTest {
     @Test
     public void 订阅者走光之后采集停下_再有人来还能重新开始() throws Exception {
         grant(true);
-        MicrophoneSourceProvider provider = new MicrophoneSourceProvider(app());
+        DeviceSourceProvider provider = new DeviceSourceProvider(app());
         AudioSource source = provider.microphone();
 
-        final int[] got = {0};
         AudioSource.Sink sink = new AudioSource.Sink() {
             @Override
             public void onAudio(byte[] data, int offset, int length) {
-                got[0]++;
             }
         };
 
@@ -142,10 +147,68 @@ public class MicrophoneSourceProviderTest {
     @Test
     public void 没权限时不谎报有权限() {
         grant(false);
-        MicrophoneSourceProvider provider = new MicrophoneSourceProvider(app());
-        assertEquals(false, provider.hasRecordPermission());
+        DeviceSourceProvider provider = new DeviceSourceProvider(app());
+        assertFalse(provider.hasRecordPermission());
 
         grant(true);
-        assertEquals(true, provider.hasRecordPermission());
+        assertTrue(provider.hasRecordPermission());
+    }
+
+    // ========== 内录 ==========
+
+    @Test
+    public void 没有内录授权时报_denied_并指明去哪里点() {
+        DeviceSourceProvider provider = new DeviceSourceProvider(app());
+
+        try {
+            provider.playbackCapture();
+            fail("没授权时不该建出内录来源");
+        } catch (SourceUnavailableException e) {
+            // 内录的「没授权」和麦克风的「没权限」在协议上是同一个原因，但**提示语必须不同**：
+            // 一个要去系统设置里给权限，一个要在本应用里点一下再在系统弹框里同意。
+            assertEquals(SourceUnavailableException.DENIED, e.reason());
+            assertNotNull(e.getMessage());
+            assertTrue("提示里要告诉用户去点「允许内录」，实际是：" + e.getMessage(),
+                    e.getMessage().contains("允许内录"));
+        }
+    }
+
+    @Test
+    public void 没内录授权时_hasCaptureGrant_为假() {
+        DeviceSourceProvider provider = new DeviceSourceProvider(app());
+        assertFalse(provider.hasCaptureGrant());
+        assertFalse(provider.isCaptureOpen());
+    }
+
+    @Test
+    public void 用户点了取消也当作没授权() {
+        DeviceSourceProvider provider = new DeviceSourceProvider(app());
+        // 系统弹框被点「取消」时 resultCode 不是 RESULT_OK，这种要和新装的应用一样看待，
+        // 不能因为「data 不为空」就以为拿到授权了
+        provider.setGrant(new CaptureGrant(android.app.Activity.RESULT_CANCELED, new android.content.Intent()));
+
+        assertFalse(provider.hasCaptureGrant());
+        try {
+            provider.playbackCapture();
+            fail("取消授权后不该建出内录来源");
+        } catch (SourceUnavailableException e) {
+            assertEquals(SourceUnavailableException.DENIED, e.reason());
+        }
+    }
+
+    @Test
+    @Config(sdk = 28)
+    public void Android10_以下报_unavailable_而不是_denied() {
+        DeviceSourceProvider provider = new DeviceSourceProvider(app());
+        // 先给一份看着有效的授权，确保拒绝的理由是「版本不够」而不是「没授权」
+        provider.setGrant(new CaptureGrant(android.app.Activity.RESULT_OK, new android.content.Intent()));
+
+        try {
+            provider.playbackCapture();
+            fail("Android 10 以下不该建出内录来源");
+        } catch (SourceUnavailableException e) {
+            // 这一档必须是 unavailable：再怎么点授权也点不出来，让用户去点只会白折腾
+            assertEquals(SourceUnavailableException.UNAVAILABLE, e.reason());
+        }
     }
 }

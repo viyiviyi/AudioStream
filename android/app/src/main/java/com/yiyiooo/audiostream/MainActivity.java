@@ -8,6 +8,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.ServiceConnection;
 import android.content.pm.PackageManager;
+import android.media.projection.MediaProjectionManager;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
@@ -45,6 +46,13 @@ public class MainActivity extends Activity {
 
     /** 点「开启来源端」时当场要录音权限：没这个权限手机发不出声音。 */
     private static final int REQ_RECORD_AUDIO = 41;
+
+    /**
+     * 点「允许内录」时请系统弹授权框。这个框**每次都要弹、没法省**：
+     * Android 不允许应用自己决定能否录屏内音频，而且拿到的凭据只在本进程活着期间有效
+     * （存不了盘，下次开机就没了），所以内录做不到「授权一次以后一直可用」。
+     */
+    private static final int REQ_CAPTURE = 42;
 
     /** logcat 标签：界面日志同时进 logcat，联调与事后排查不必盯着那块屏幕。 */
     private static final String TAG = "AudioStream";
@@ -84,6 +92,8 @@ public class MainActivity extends Activity {
     private TextView sourceAddressText;
     private Button sourceButton;
     private TextView sourceStatusText;
+    private Button captureButton;
+    private TextView captureStatusText;
     private TextView logText;
     private ScrollView logScroll;
 
@@ -277,6 +287,17 @@ public class MainActivity extends Activity {
         sourceStatusText = text("来源端：未开启", 12, Gravity.START);
         root.addView(sourceStatusText);
 
+        captureButton = new Button(this);
+        captureButton.setText("允许内录");
+        captureButton.setTextSize(sp);
+        // 服务没绑上之前点了没有对象可操作，先灰着，服务一到就打开
+        captureButton.setEnabled(false);
+        captureButton.setOnClickListener(v -> onCaptureRequest());
+        root.addView(captureButton);
+
+        captureStatusText = text("内录：未授权", 12, Gravity.START);
+        root.addView(captureStatusText);
+
         logScroll = new ScrollView(this);
         logText = new TextView(this);
         logText.setTextSize(11);
@@ -461,9 +482,10 @@ public class MainActivity extends Activity {
             refreshSourceStatus();
             return;
         }
-        if (!service.hasRecordPermission()) {
-            // 没权限就先要，不能「先开服务再补权限」：Android 会在服务真去读麦克风那一刻直接拒掉
-            Log.i(TAG, "没有录音权限，先申请");
+        if (!service.hasRecordPermission() && !service.hasCaptureGrant()) {
+            // 两个来源一个都用不了，先要录音权限：它能被永久授予，比内录那个每次都要弹框的
+            // 授权更该先试。已经授权过内录的用户不该在这里被拦住。
+            Log.i(TAG, "录音权限与内录授权都没有，先申请录音权限");
             requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO}, REQ_RECORD_AUDIO);
             return;
         }
@@ -480,6 +502,62 @@ public class MainActivity extends Activity {
         refreshSourceAddress();
     }
 
+    // ---------- 内录（把手机正在放的声音给 PC 拉） ----------
+
+    /**
+     * 点「允许内录」：请系统弹一次授权框。
+     *
+     * 这个按钮和「开启来源端」是两件独立的事，刻意不合并：录音权限可以通过系统设置页永久授予，
+     * 内录授权不能——它每次都弹框且只在本次进程有效。两者的失败提示语与补救动作都不同，
+     * 合成一个按钮的话，用户点了不知道自己在同意什么。
+     */
+    private void onCaptureRequest() {
+        if (service == null) {
+            detailText.setText("后台服务还没就绪，稍等一下再点。");
+            return;
+        }
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+            detailText.setText("这台手机的 Android 版本太老，内录需要 Android 10 及以上。");
+            return;
+        }
+        MediaProjectionManager manager =
+                (MediaProjectionManager) getSystemService(MEDIA_PROJECTION_SERVICE);
+        if (manager == null) {
+            detailText.setText("这台设备没有提供内录能力。");
+            return;
+        }
+        try {
+            startActivityForResult(manager.createScreenCaptureIntent(), REQ_CAPTURE);
+            log("请在系统弹框里点「立即开始」，手机才会把正在放的声音送出去");
+        } catch (Exception e) {
+            // 部分定制系统会把这一步拦下来（缺少系统组件、被安全策略禁止）
+            detailText.setText("打不开内录授权框：" + e);
+            Log.w(TAG, "createScreenCaptureIntent 失败", e);
+        }
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode != REQ_CAPTURE) return;
+        if (service == null) {
+            // 用户在系统弹框上停留的过程中进程可能被回收过
+            Log.w(TAG, "内录授权回来时服务已经断开，这次授权用不上");
+            return;
+        }
+        // 取消时 resultCode 不是 RESULT_OK。这一点必须如实带给服务：不能因为 data 非空
+        // 就当成授权成功，否则 PC 端点单会走到「系统没给出内录通道」那种没法解释的失败
+        service.setCaptureGrant(resultCode, data);
+        boolean ok = service.hasCaptureGrant();
+        log(ok ? "内录已授权：PC 端可以拉「手机内录」了" : "内录授权被取消");
+        if (!ok) {
+            detailText.setText("内录没被授权：想要电脑拉手机正在放的声音，需要同意那个系统弹框。");
+        } else if (!service.sourceRunning()) {
+            detailText.setText("内录已允许。别忘了点上面的「开启来源端」，电脑才连得进来。");
+        }
+        refreshSourceStatus();
+    }
+
     /**
      * 刷来源端那两行。它跟着 tick 跑，所以每处 setText 都要先比内容——
      * 无条件 setText 会让窗口一直重绘：费电，而且自动化工具永远等不到空闲，界面读不出来。
@@ -490,6 +568,11 @@ public class MainActivity extends Activity {
             if (sourceButton.isEnabled()) sourceButton.setEnabled(false);
             setIfChanged(sourceButton, "开启来源端");
             setIfChanged(sourceStatusText, "来源端：未开启");
+            if (captureButton != null) {
+                if (captureButton.isEnabled()) captureButton.setEnabled(false);
+                setIfChanged(captureButton, "允许内录");
+                setIfChanged(captureStatusText, "内录：未授权");
+            }
             return;
         }
         if (!sourceButton.isEnabled()) sourceButton.setEnabled(true);
@@ -497,6 +580,14 @@ public class MainActivity extends Activity {
         setIfChanged(sourceButton, running ? "关闭来源端" : "开启来源端");
         setIfChanged(sourceStatusText, service.sourceStatusLine()
                 + (running ? "　累计被拉 " + service.sourceTotalSessions() + " 次" : ""));
+
+        if (captureButton != null) {
+            if (!captureButton.isEnabled()) captureButton.setEnabled(true);
+            // 已经授权过就给「重新授权」的措辞：那个授权活不过本次进程，
+            // 用户过一会儿回来发现 PC 拉不了内录时，要知道该点的是这个按钮
+            setIfChanged(captureButton, service.hasCaptureGrant() ? "重新授权内录" : "允许内录");
+            setIfChanged(captureStatusText, service.captureStatusLine());
+        }
     }
 
     /**

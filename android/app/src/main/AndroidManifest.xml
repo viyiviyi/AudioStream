@@ -9,6 +9,10 @@
     <!-- 来源端要长时间拿着麦克风，前台服务必须同时声明 microphone 类型；
          光有 RECORD_AUDIO 不够——targetSdk 34 起，前台服务在后台访问麦克风要求类型匹配 -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+    <!-- 内录（AudioPlaybackCapture）走的是系统弹框授权，与 RECORD_AUDIO 是两条独立的路：
+         它不需要录音权限，但取 MediaProjection 之前必须以 mediaProjection 类型进前台，
+         否则 Android 14 起会被系统直接拒绝，而那时用户刚点完同意 -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
 
     <!-- 来源端要采麦克风（目标二），先声明；运行时还会再要一次授权 -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
@@ -44,7 +48,7 @@
         <service
             android:name=".AudioStreamService"
             android:exported="false"
-            android:foregroundServiceType="mediaPlayback|microphone" />
+            android:foregroundServiceType="mediaPlayback|microphone|mediaProjection" />
     </application>
 
 </manifest>

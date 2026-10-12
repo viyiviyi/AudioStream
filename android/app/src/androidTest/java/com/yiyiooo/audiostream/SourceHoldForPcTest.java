@@ -10,7 +10,7 @@ import androidx.test.platform.app.InstrumentationRegistry;
 import androidx.test.rule.GrantPermissionRule;
 
 import com.yiyiooo.audiostream.source.LocalAddresses;
-import com.yiyiooo.audiostream.source.MicrophoneSourceProvider;
+import com.yiyiooo.audiostream.source.DeviceSourceProvider;
 import com.yiyiooo.audiostream.source.SourceServer;
 
 import org.junit.Rule;
@@ -46,7 +46,7 @@ public class SourceHoldForPcTest {
         }
 
         Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
-        MicrophoneSourceProvider provider = new MicrophoneSourceProvider(context);
+        DeviceSourceProvider provider = new DeviceSourceProvider(context);
         SourceServer server = new SourceServer(provider, "aabbccddeeff00112233445566778899",
                 "安卓手机", "1.0.0", SourceServer.HTTP_PORT);
         String error = server.start();

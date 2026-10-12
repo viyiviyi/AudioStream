@@ -32,6 +32,12 @@ public class SourceServerTest {
         public AudioSource microphone() throws SourceUnavailableException {
             throw new SourceUnavailableException(SourceUnavailableException.DENIED, "测试里没有麦克风");
         }
+
+        @Override
+        public AudioSource playbackCapture() throws SourceUnavailableException {
+            // 这台手机的默认状态：用户还没点过内录授权
+            throw new SourceUnavailableException(SourceUnavailableException.DENIED, "测试里没有内录授权");
+        }
     }
 
     private static SourceServer startServer(int httpPort) {

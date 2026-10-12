@@ -15,7 +15,7 @@ import androidx.test.rule.GrantPermissionRule;
 import com.yiyiooo.audiostream.protocol.AudioFormat;
 import com.yiyiooo.audiostream.pull.PullSession;
 import com.yiyiooo.audiostream.pull.PullState;
-import com.yiyiooo.audiostream.source.MicrophoneSourceProvider;
+import com.yiyiooo.audiostream.source.DeviceSourceProvider;
 import com.yiyiooo.audiostream.source.SourceServer;
 
 import org.junit.Rule;
@@ -88,7 +88,7 @@ public class SourceServerDeviceTest {
                 PackageManager.PERMISSION_GRANTED,
                 context.checkSelfPermission(Manifest.permission.RECORD_AUDIO));
 
-        MicrophoneSourceProvider provider = new MicrophoneSourceProvider(context);
+        DeviceSourceProvider provider = new DeviceSourceProvider(context);
         SourceServer server = new SourceServer(provider, MACHINE_ID, "测试手机", "1.0.0-test",
                 SourceServer.HTTP_PORT);
         String error = server.start();
@@ -106,6 +106,11 @@ public class SourceServerDeviceTest {
             System.out.println("[来源端] /api/devices = " + devices);
             assertTrue("设备清单要有麦克风：" + devices, devices.contains("\"ID\":\"mic:default\""));
             assertTrue("要标成输入：" + devices, devices.contains("\"Flow\":\"input\""));
+            // 内录：手机现在也提供「它正在放的声音」这一类（输出类），
+            // 与 PC 端那边的输出设备（环回）是同一个位置，PC 端配置页按 Flow 分组显示
+            assertTrue("设备清单要有内录：" + devices, devices.contains("\"ID\":\"capture:default\""));
+            assertTrue("设备清单要有内录的跟随项：" + devices, devices.contains("\"ID\":\"default\""));
+            assertTrue("内录要标成输出：" + devices, devices.contains("\"Flow\":\"output\""));
 
             // 2) TCP：用工程自己的拉取方真的拉一路下来
             final AtomicLong totalBytes = new AtomicLong();
@@ -172,5 +177,66 @@ public class SourceServerDeviceTest {
             server.close();
             provider.release();
         }
+    }
+
+    /**
+     * 内录在真机上的**未授权**行为——也就是手机刚装好、用户还没点过任何授权时的状态。
+     *
+     * 为什么单独验这一条：内录的完整端到端（真的把手机正在放的声音采下来）需要用户在系统弹框里
+     * 点「同意」，而自动化点不了那个框。但「没授权时给 PC 端的拒绝对不对、原因能不能照着做」
+     * 完全不需要授权，而且它正是用户第一次尝试内录时唯一会走到的路径——
+     * 这条路要是哑了，用户看到的就是「选了个设备，然后就没了」。
+     */
+    @Test
+    public void 没授权内录时点单会拿到可照做的拒绝原因() throws Exception {
+        Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
+        DeviceSourceProvider provider = new DeviceSourceProvider(context);
+        assertTrue("这条用例的前提是「本次进程里没点过内录授权」，现在却是已授权",
+                !provider.hasCaptureGrant());
+
+        SourceServer server = new SourceServer(provider, MACHINE_ID, "测试手机", "1.0.0-test",
+                SourceServer.HTTP_PORT);
+        String error = server.start();
+        assertNull("来源端应该能起来：" + error, error);
+
+        try {
+            // 用最朴素的客户端直连，读协议里那两段原始字符串：拒绝原因要能被 C# 端原样解码后
+            // 显示给用户，所以这里不经过任何「翻成人话」的层
+            java.net.Socket socket = new java.net.Socket("127.0.0.1", server.tcpPort());
+            socket.setSoTimeout(5000);
+            try {
+                java.io.OutputStream out = socket.getOutputStream();
+                com.yiyiooo.audiostream.protocol.FrameReader reader =
+                        new com.yiyiooo.audiostream.protocol.FrameReader(socket.getInputStream());
+
+                sendText(out, "/Hello/" + PULLER_ID + "/测试拉取端");
+                assertTrue("握手应当有应答", reader.readNext());
+                System.out.println("[内录] 握手应答 = " + reader.readText());
+
+                sendText(out, "/WaveFormat/capture:default/手机内录");
+                assertTrue("点单内录应当有应答（不能默默断开）", reader.readNext());
+                String reply = reader.readText();
+                System.out.println("[内录] 点单应答 = " + reply);
+
+                assertTrue("没授权内录时应当是 denied，实际：" + reply,
+                        reply.startsWith("/Reject/denied/"));
+                String reason = java.net.URLDecoder.decode(
+                        reply.substring("/Reject/denied/".length()), "UTF-8");
+                System.out.println("[内录] 给用户看的原因 = " + reason);
+                assertTrue("原因要告诉用户去点「允许内录」，实际：" + reason,
+                        reason.contains("允许内录"));
+            } finally {
+                socket.close();
+            }
+        } finally {
+            server.close();
+            provider.release();
+        }
+    }
+
+    private static void sendText(java.io.OutputStream out, String text) throws Exception {
+        byte[] frame = com.yiyiooo.audiostream.protocol.AudioFraming.encodeText(text);
+        out.write(frame, 0, frame.length);
+        out.flush();
     }
 }

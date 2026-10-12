@@ -178,16 +178,19 @@ public final class SourceSession implements Runnable, AudioSource.Sink, Closeabl
         // 同一条会话上重复点单：先把上一路退掉，否则两路采集会叠在一起发过去
         dropSource();
 
-        if (!SourceDevices.isMicrophone(requestedId)) {
-            // 说明白「要的是什么、这台机器有什么」，否则用户在 PC 端只看到一句设备不存在
-            String wanted = requestedName.isEmpty() ? requestedId : requestedName;
-            reject("nodevice", "手机端没有这个来源设备（要的是「" + wanted + "」），目前只有麦克风");
-            return false;
-        }
-
         AudioSource picked;
         try {
-            picked = provider.microphone();
+            if (SourceDevices.isMicrophone(requestedId)) {
+                picked = provider.microphone();
+            } else if (SourceDevices.isCapture(requestedId)) {
+                picked = provider.playbackCapture();
+            } else {
+                // 说明白「要的是什么、这台机器有什么」，否则用户在 PC 端只看到一句设备不存在
+                String wanted = requestedName.isEmpty() ? requestedId : requestedName;
+                reject("nodevice", "手机端没有这个来源设备（要的是「" + wanted + "」），目前只有 "
+                        + SourceDevices.availableSummary());
+                return false;
+            }
         } catch (SourceUnavailableException e) {
             reject(e.reason(), e.getMessage());
             return false;
