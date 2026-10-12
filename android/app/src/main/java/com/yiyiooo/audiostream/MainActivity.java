@@ -13,13 +13,14 @@ import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
 import android.util.Log;
+import android.view.View;
 import android.widget.ArrayAdapter;
+import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.app.AppCompatDelegate;
 
@@ -31,22 +32,30 @@ import com.google.android.material.textfield.TextInputEditText;
 import com.google.android.material.textfield.TextInputLayout;
 import com.yiyiooo.audiostream.discovery.DeviceInfo;
 import com.yiyiooo.audiostream.discovery.PcInfo;
-import com.yiyiooo.audiostream.protocol.AudioFormat;
 import com.yiyiooo.audiostream.pull.PullState;
+import com.yiyiooo.audiostream.route.PlaybackRoute;
 
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
-import java.util.Locale;
+import java.util.Map;
+import java.util.Set;
 
 /**
- * 主界面：一屏管两头——上半截是播放端（填电脑地址 → 刷设备列表 → 选来源 → 连接/断开 →
- * 调这一路的音量），下半截是来源端（把手机变成一台 AudioStream 机器，让电脑反过来拉）。
+ * 主界面：一屏管两头——上半截是播放端（填电脑地址 → 刷设备列表 → 选来源 → 加一路，
+ * 加了几路就有几张卡片，每张卡片自己一根音量滑条），下半截是来源端
+ * （把手机变成一台 AudioStream 机器，让电脑反过来拉）。
  *
- * 界面走 Material 组件与 XML 布局（res/layout/activity_main.xml）；协议层与音频层仍然只用平台 API，
- * 因为那两层要逐字节对齐 C# 端，多一层封装只会多一个出错的地方。
+ * 界面走 Material 组件与 XML 布局（res/layout/activity_main.xml + item_route.xml）；
+ * 协议层与音频层仍然只用平台 API，因为那两层要逐字节对齐 C# 端，多一层封装只会多一个出错的地方。
  *
  * 这里只做三件事：把控件找出来接上回调、把服务报上来的状态照实显示、把用户的选择落盘。
  * 音频链路本身在前台服务里，锁屏或切后台再回来，读到的状态与服务是同一份。
+ *
+ * **每张卡片里的控件 id 是重复的**（有几路就有几份），所以一律从卡片自己的根视图上找，
+ * 拿 Activity 去找只会拿到第一张卡片的控件——那会让所有路的音量都调到第一路去。
  */
 public class MainActivity extends AppCompatActivity {
 
@@ -64,6 +73,9 @@ public class MainActivity extends AppCompatActivity {
 
     /** logcat 标签：界面日志同时进 logcat，联调与事后排查不必盯着那块屏幕。 */
     private static final String TAG = "AudioStream";
+
+    /** 音量滑条的步长。取值与布局里 Slider 的 android:stepSize 必须一致，见 snapVolume。 */
+    private static final float VOLUME_STEP = 0.05f;
 
     // --- 服务绑定 ---
     private AudioStreamService service;
@@ -84,22 +96,22 @@ public class MainActivity extends AppCompatActivity {
             service = null;
             bound = false;
             Log.w(TAG, "服务断开（进程多半被系统收了），界面按未连接处理");
-            updateButtonState();
+            updateAddButtonState();
         }
     };
 
-    // --- 播放端控件 ---
+    // --- 「加一路」控件 ---
     private TextInputLayout hostLayout;
     private TextInputEditText hostInput;
     private MaterialButton discoverButton;
     private Spinner deviceSpinner;
-    private MaterialButton connectButton;
-    private TextView statusText;
-    private TextView detailText;
-    private TextView formatText;
-    private TextView countersText;
-    private Slider volumeSlider;
-    private TextView volumeText;
+    private MaterialButton addRouteButton;
+    private TextView addHintText;
+
+    // --- 路由列表 ---
+    private TextView routesTitle;
+    private TextView routesEmptyText;
+    private LinearLayout routeContainer;
 
     // --- 来源端控件 ---
     private TextView localAddressText;
@@ -116,35 +128,19 @@ public class MainActivity extends AppCompatActivity {
     private final List<DeviceInfo> devices = new ArrayList<>();
     private final List<String> deviceLabels = new ArrayList<>();
 
+    /** 屏幕上每一路的那张卡片，按路由 id 索引。 */
+    private final Map<String, RouteCard> cards = new HashMap<>();
+
     private final Handler ui = new Handler(Looper.getMainLooper());
     private boolean tickRunning;
-    private long lastCounterLogMs;
-    private long lastWrittenBytes = -1;
-
-    /** 音量滑条的步长。取值与布局里 Slider 的 android:stepSize 必须一致，见 applyVolume。 */
-    private static final float VOLUME_STEP = 0.05f;
 
     // ========== 服务回调（主线程） ==========
 
     private final AudioStreamService.Listener serviceListener = new AudioStreamService.Listener() {
         @Override
-        public void onState(PullState state, String detail) {
-            statusText.setText(state.label());
-            detailText.setText(detail == null ? "" : detail);
-            updateButtonState();
-            log("状态：" + state.label() + (detail == null || detail.isEmpty() ? "" : " — " + detail));
-        }
-
-        @Override
-        public void onFormat(AudioFormat format) {
-            formatText.setText(format == null ? "" : "格式：" + format.describe());
-            log("格式：" + (format == null ? "—" : format.describe()));
-        }
-
-        @Override
-        public void onPlaybackFailed(String reason) {
-            detailText.setText(reason);
-            log("播放失败：" + reason);
+        public void onRoutesChanged() {
+            renderRoutes();
+            updateAddButtonState();
         }
 
         @Override
@@ -164,8 +160,6 @@ public class MainActivity extends AppCompatActivity {
             for (DeviceInfo d : devices) {
                 deviceLabels.add((d.isOutput() ? "[输出] " : "[输入] ") + d.displayName());
             }
-
-            // 列表可能为空：对端一台设备都没接时可以显示提示
             if (deviceLabels.isEmpty()) {
                 deviceLabels.add("（对方没有可选设备）");
             }
@@ -173,22 +167,22 @@ public class MainActivity extends AppCompatActivity {
             ArrayAdapter<String> adapter = new ArrayAdapter<>(MainActivity.this,
                     android.R.layout.simple_spinner_dropdown_item, deviceLabels);
             deviceSpinner.setAdapter(adapter);
-            restoreSelection();
-            updateButtonState();
 
             String pcBrief = (info == null ? "" :
                     info.pcName().isEmpty() ? info.machineId() : info.pcName());
             log("发现 " + devices.size() + " 个设备" + (pcBrief.isEmpty() ? "" : "（" + pcBrief + "）"));
             if (devices.isEmpty()) {
-                detailText.setText("对方没有可选设备：检查它的声卡是否可用。");
+                addHint("对方没有可选设备：检查它的声卡是否可用。");
+            } else {
+                addHint("");
             }
+            updateAddButtonState();
         }
 
         @Override
         public void onDiscoveryFailed(String reason) {
-            detailText.setText(reason);
+            addHint(reason);
             log("发现失败：" + reason);
-            updateButtonState();
         }
     };
 
@@ -200,7 +194,6 @@ public class MainActivity extends AppCompatActivity {
         setContentView(R.layout.activity_main);
         bindViews();
         setupToolbar();
-        setupVolume();
         setupTheme();
 
         requestNotificationPermissionIfNeeded();
@@ -228,13 +221,14 @@ public class MainActivity extends AppCompatActivity {
         super.onDestroy();
     }
 
-    /** 服务连上后才有的动作：回填上次的地址与音量。 */
+    /** 服务连上后才有的动作：回填上次的地址、把已经在跑的那几路画出来。 */
     private void onServiceReady() {
-        AppConfig config = AppConfig.load(this);
-        if (!config.host().isEmpty()) {
-            hostInput.setText(config.host());
+        String lastHost = AppConfig.loadLastHost(this);
+        if (!lastHost.isEmpty() && text(hostInput).isEmpty()) {
+            hostInput.setText(lastHost);
         }
-        updateButtonState();
+        updateAddButtonState();
+        renderRoutes();
         refreshSourceStatus();
         refreshSourceAddress();
     }
@@ -246,13 +240,12 @@ public class MainActivity extends AppCompatActivity {
         hostInput = findViewById(R.id.hostInput);
         discoverButton = findViewById(R.id.discoverButton);
         deviceSpinner = findViewById(R.id.deviceSpinner);
-        connectButton = findViewById(R.id.connectButton);
-        statusText = findViewById(R.id.statusText);
-        detailText = findViewById(R.id.detailText);
-        formatText = findViewById(R.id.formatText);
-        countersText = findViewById(R.id.countersText);
-        volumeSlider = findViewById(R.id.volumeSlider);
-        volumeText = findViewById(R.id.volumeText);
+        addRouteButton = findViewById(R.id.addRouteButton);
+        addHintText = findViewById(R.id.addHintText);
+
+        routesTitle = findViewById(R.id.routesTitle);
+        routesEmptyText = findViewById(R.id.routesEmptyText);
+        routeContainer = findViewById(R.id.routeContainer);
 
         localAddressText = findViewById(R.id.localAddressText);
         sourceButton = findViewById(R.id.sourceButton);
@@ -270,15 +263,14 @@ public class MainActivity extends AppCompatActivity {
                 new String[]{"先刷新设备列表"}));
 
         discoverButton.setOnClickListener(v -> onDiscover());
-        connectButton.setOnClickListener(v -> onConnectToggle());
+        addRouteButton.setOnClickListener(v -> onAddRoute());
         sourceButton.setOnClickListener(v -> onSourceToggle());
         captureButton.setOnClickListener(v -> onCaptureRequest());
 
         // 后台服务没绑上之前点了也没有对象可操作，先灰着，服务一到就打开
+        addRouteButton.setEnabled(false);
         sourceButton.setEnabled(false);
         captureButton.setEnabled(false);
-
-        updateButtonState();
     }
 
     private void setupToolbar() {
@@ -286,32 +278,6 @@ public class MainActivity extends AppCompatActivity {
         MachineIdentity identity = MachineIdentity.load(this);
         // 副标题给版本号与本机名字：排查时第一件要问的就是「你装的是哪一版、这台机器是谁」
         toolbar.setSubtitle("v" + BuildConfig.VERSION_NAME + "　·　本机 " + identity.name());
-    }
-
-    // ---------- 播放音量（只作用于本应用输出，不碰系统媒体音量） ----------
-
-    private void setupVolume() {
-        applyVolume(AppConfig.loadVolume(this));
-        volumeSlider.addOnChangeListener((slider, value, fromUser) -> {
-            if (!fromUser) return; // 代码设的值不必再回写一次
-            applyVolume(value);
-        });
-    }
-
-    private void applyVolume(float value) {
-        // Slider 要求设进去的值正好落在 stepSize 的整数倍上，否则直接抛。
-        // 存的偏好可能来自旧版本或被手改过，所以在这里量化一次再设——崩溃比音量差一格严重得多。
-        float snapped = Math.round(value / VOLUME_STEP) * VOLUME_STEP;
-        snapped = Math.max(0f, Math.min(1f, snapped));
-        if (Math.abs(volumeSlider.getValue() - snapped) > 1e-4) {
-            volumeSlider.setValue(snapped);
-        }
-        volumeText.setText(Math.round(snapped * 100) + "%");
-        if (service != null) {
-            service.setVolume(snapped); // 服务负责作用到当前会话并落盘
-        } else {
-            AppConfig.saveVolume(this, snapped); // 还没连上服务也不能丢用户的选择
-        }
     }
 
     // ---------- 外观 ----------
@@ -349,58 +315,209 @@ public class MainActivity extends AppCompatActivity {
         return AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM;
     }
 
+    // ========== 多路列表 ==========
+
+    /**
+     * 按服务报上来的那几路重画列表。
+     *
+     * 已有的卡片连着控件一起留着、只更新内容——整块清掉重建会有两个后果：用户正在拖的音量滑条
+     * 会被打断，而且滚动位置会跳回顶部。
+     */
+    private void renderRoutes() {
+        if (service == null) return;
+        List<PlaybackRoute> routes = service.routes();
+
+        Set<String> alive = new HashSet<>();
+        for (PlaybackRoute route : routes) alive.add(route.id());
+
+        // 撤掉已经不在列表里的
+        Iterator<Map.Entry<String, RouteCard>> iterator = cards.entrySet().iterator();
+        while (iterator.hasNext()) {
+            Map.Entry<String, RouteCard> entry = iterator.next();
+            if (!alive.contains(entry.getKey())) {
+                routeContainer.removeView(entry.getValue().root);
+                iterator.remove();
+            }
+        }
+
+        // 补上新出现的，并把每一路的内容刷一遍
+        for (PlaybackRoute route : routes) {
+            RouteCard card = cards.get(route.id());
+            if (card == null) {
+                card = createCard(route);
+                cards.put(route.id(), card);
+                routeContainer.addView(card.root);
+            }
+            card.route = route;
+            card.bind();
+        }
+
+        routesEmptyText.setVisibility(routes.isEmpty() ? View.VISIBLE : View.GONE);
+        setIfChanged(routesTitle, routes.isEmpty()
+                ? "正在播放的路"
+                : "正在播放的路（" + routes.size() + " 路）");
+    }
+
+    private RouteCard createCard(PlaybackRoute route) {
+        View root = getLayoutInflater().inflate(R.layout.item_route, routeContainer, false);
+        RouteCard card = new RouteCard(root, route.id());
+
+        card.volume.addOnChangeListener((slider, value, fromUser) -> {
+            // fromUser 为假是代码设值（bind 里对齐配置），那时不该回写服务——
+            // 否则会变成「服务说 0.3 → 界面设 0.3 → 回写 0.3」，白转一圈还可能打断用户
+            if (!fromUser) return;
+            card.volumeText.setText(percent(value));
+            if (service != null) service.setRouteVolume(card.id, value);
+        });
+        card.volume.addOnSliderTouchListener(new Slider.OnSliderTouchListener() {
+            @Override
+            public void onStartTrackingTouch(Slider slider) {
+                card.tracking = true;
+            }
+
+            @Override
+            public void onStopTrackingTouch(Slider slider) {
+                card.tracking = false;
+            }
+        });
+
+        card.stop.setOnClickListener(v -> {
+            if (service == null) return;
+            log("停掉一路：" + card.title.getText());
+            service.removeRoute(card.id);
+        });
+        return card;
+    }
+
+    /** 屏幕上的一路。它拿着这一路的运行时对象与那几个控件，负责把状态照实显示。 */
+    private final class RouteCard {
+        final View root;
+        final String id;
+        final TextView title;
+        final TextView state;
+        final TextView detail;
+        final TextView counters;
+        final TextView volumeText;
+        final Slider volume;
+        final MaterialButton stop;
+
+        PlaybackRoute route;
+
+        /** 用户此刻正按着这根滑条。按着的时候不去动它，免得跟他的手指打架。 */
+        boolean tracking;
+
+        RouteCard(View root, String id) {
+            this.root = root;
+            this.id = id;
+            this.title = root.findViewById(R.id.routeTitle);
+            this.state = root.findViewById(R.id.routeState);
+            this.detail = root.findViewById(R.id.routeDetail);
+            this.counters = root.findViewById(R.id.routeCounters);
+            this.volumeText = root.findViewById(R.id.routeVolumeText);
+            this.volume = root.findViewById(R.id.routeVolume);
+            this.stop = root.findViewById(R.id.routeStop);
+        }
+
+        void bind() {
+            PlaybackRoute current = route;
+            if (current == null) return;
+
+            setIfChanged(title, current.config().sourceLabel());
+            setIfChanged(state, current.state().label());
+
+            String note = current.stateDetail();
+            if (note == null || note.contentEquals(current.state().label())) {
+                setIfChanged(detail, "");
+            } else {
+                setIfChanged(detail, note);
+            }
+            // 连不上与播放失败要显眼；正常状态的那句话不必抢眼。
+            // 颜色从当前主题里取而不是写死：深色模式下写死的深红会变成一团看不清的字。
+            boolean bad = current.state() == PullState.FAILED;
+            detail.setTextColor(themeColor(bad
+                    ? com.google.android.material.R.attr.colorError
+                    : com.google.android.material.R.attr.colorOnSurfaceVariant));
+
+            bindCounters();
+
+            if (!tracking) {
+                float value = snapVolume(current.config().volume());
+                // 只在真的不一样时设：Slider.setValue 会让它自己重绘并触发一次监听
+                if (Math.abs(volume.getValue() - value) > 1e-4f) {
+                    volume.setValue(value);
+                }
+                setIfChanged(volumeText, percent(value));
+            }
+        }
+
+        void bindCounters() {
+            PlaybackRoute current = route;
+            if (current == null) return;
+            setIfChanged(counters, "缓冲 " + current.bufferedMs() + "ms"
+                    + "　欠载 " + current.underruns()
+                    + "　丢字节 " + current.droppedBytes()
+                    + "　写 " + (current.writtenBytes() / 1024) + "KB");
+        }
+    }
+
     // ========== 交互 ==========
 
     private void onDiscover() {
-        String host = hostInput.getText() == null ? "" : hostInput.getText().toString().trim();
+        String host = text(hostInput).trim();
         hostLayout.setError(null);
         if (host.isEmpty()) {
             showFieldError("请先填电脑地址。");
             return;
         }
-        detailText.setText("正在发现…");
+        addHint("正在发现…");
         if (service != null) service.discover(host);
     }
 
-    private void onConnectToggle() {
-        Log.i(TAG, "点连接：service=" + (service == null ? "null" : "就绪")
-                + " state=" + (service == null ? "-" : service.state()));
-        if (service == null) return;
-        if (service.state() != PullState.IDLE && service.state() != PullState.STOPPED
-                && service.state() != PullState.FAILED) {
-            // 正在连接或播放中：这个按钮就是「断开」
-            service.disconnect();
-            return;
-        }
-        connectSelected();
-    }
-
-    private void connectSelected() {
-        String host = hostInput.getText() == null ? "" : hostInput.getText().toString().trim();
+    /**
+     * 把「当前填的地址 + 当前选中的设备」加成一路。
+     *
+     * 与从前的「连接」按钮的区别：那时它只能有一路，点了就是把旧的那路换掉；
+     * 现在它是往上加，加完这一路照样在跑，用户可以换个设备再加一路。
+     */
+    private void onAddRoute() {
+        String host = text(hostInput).trim();
         hostLayout.setError(null);
         if (host.isEmpty()) {
             showFieldError("请先填电脑地址。");
+            return;
+        }
+        if (service == null) {
+            addHint("后台服务还没就绪，稍等一下再点。");
             return;
         }
         int index = deviceSpinner.getSelectedItemPosition();
         if (index < 0 || index >= devices.size()) {
-            detailText.setText("请先刷新并选择一个来源设备。");
-            Log.w(TAG, "连接被拦下：下拉选项 " + index + " 对不上设备表（" + devices.size() + " 项）");
+            addHint("请先刷新设备列表，再选一个来源设备。");
+            Log.w(TAG, "加一路被拦下：下拉选项 " + index + " 对不上设备表（" + devices.size() + " 项）");
             return;
         }
-        // 注意：deviceLabels 是「输出在前、输入在后」的顺序，与 devices 一 一对应，
-        // 这里重建 labels 时对空条目没有跳过，所以 index 就是 devices 的下标。
+        // deviceLabels 与 devices 一一对应（都在 onDevices 里按同一顺序重建），所以 index 就是下标
         DeviceInfo device = devices.get(index);
-        AppConfig.saveDevice(this, device.id(), device.name());
-        Log.i(TAG, "开始连接 " + host + " 的设备 " + device.name() + "（" + device.id() + "）");
         ensureForegroundService();
-        service.connect(host, device.id(), device.name());
+        String error = service.addRoute(host, device.id(), device.name());
+        if (error != null) {
+            addHint(error);
+            log("加一路失败：" + error);
+            return;
+        }
+        addHint("");
+        log("加了一路：" + host + " 的 " + device.name());
+        renderRoutes();
     }
 
-    /** 地址填错时把红字放在输入框下面而不是状态区：用户的视线本来就在那一格上。 */
+    /** 地址填错时把红字放在输入框下面而不是别处：用户的视线本来就在那一格上。 */
     private void showFieldError(String message) {
         hostLayout.setError(message);
-        detailText.setText(message);
+        addHint(message);
+    }
+
+    private void addHint(String message) {
+        setIfChanged(addHintText, message == null ? "" : message);
     }
 
     /**
@@ -417,35 +534,14 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    private void restoreSelection() {
-        AppConfig config = AppConfig.load(this);
-        if (config.deviceId().isEmpty()) return;
-        for (int i = 0; i < devices.size(); i++) {
-            if (config.deviceId().equals(devices.get(i).id())) {
-                deviceSpinner.setSelection(i);
-                return;
-            }
-        }
-    }
-
-    private void updateButtonState() {
+    private void updateAddButtonState() {
         if (service == null) {
-            connectButton.setText("连接");
-            connectButton.setEnabled(false);
+            addRouteButton.setEnabled(false);
             return;
         }
-        // 服务就绪就必须把按钮打开：bindViews 里第一次调用它时服务还没绑上，
-        // 那时按钮被禁用了；这里若不显式打开，它会一直灰着——用户点了没反应，
-        // 而界面上看不出任何原因（这一条只有真把界面跑起来才会暴露）。
-        connectButton.setEnabled(true);
-        PullState s = service.state();
-        if (s == PullState.CONNECTING || s == PullState.HANDSHAKING
-                || s == PullState.NEGOTIATING || s == PullState.PLAYING) {
-            connectButton.setText("断开");
-        } else {
-            connectButton.setText("连接");
-        }
-        // 发现中不禁用连接按钮，但没选中设备时连接会提示
+        // 服务就绪就必须把按钮打开：bindViews 里第一次调用它时服务还没绑上，那时按钮被禁用了；
+        // 这里若不显式打开，它会一直灰着——用户点了没反应，而界面上看不出任何原因。
+        addRouteButton.setEnabled(true);
     }
 
     private void log(String line) {
@@ -480,25 +576,13 @@ public class MainActivity extends AppCompatActivity {
         ui.removeCallbacks(tick);
     }
 
+    /**
+     * 每 500ms 只刷数字，不重建列表：无条件 setText 会让窗口一直在重绘（费电，而且窗口永远不 idle，
+     * uiautomator 之类的自动化工具会一直等不到），所以每一处 setText 之前都比一次内容。
+     */
     private void refreshCounters() {
-        if (service == null) return;
-        String text = "缓冲 " + service.bufferedMs() + "ms"
-                + "　欠载 " + service.underruns()
-                + "　丢字节 " + service.droppedBytes()
-                + "　写 " + (service.writtenBytes() / 1024) + "KB";
-        // 每 500ms 无条件 setText 会让这个窗口一直在重绘：白耗电，而且窗口永远不 idle，
-        // uiautomator 之类的自动化工具会一直等不到，联调时连界面都读不出来。内容没变就不动它。
-        if (!text.contentEquals(countersText.getText())) {
-            countersText.setText(text);
-        }
-        // 计数进 logcat 但降频：写入字节在涨就是「音频真的送到声卡了」的直接证据，
-        // 每 2 秒一条足够看趋势，又不至于把日志刷爆。
-        long written = service.writtenBytes();
-        long now = System.currentTimeMillis();
-        if (written != lastWrittenBytes && now - lastCounterLogMs >= 2000) {
-            lastWrittenBytes = written;
-            lastCounterLogMs = now;
-            Log.i(TAG, text);
+        for (RouteCard card : cards.values()) {
+            card.bindCounters();
         }
         refreshSourceStatus();
     }
@@ -507,7 +591,7 @@ public class MainActivity extends AppCompatActivity {
 
     private void onSourceToggle() {
         if (service == null) {
-            detailText.setText("后台服务还没就绪，稍等一下再点。");
+            addHint("后台服务还没就绪，稍等一下再点。");
             return;
         }
         if (service.sourceRunning()) {
@@ -529,7 +613,6 @@ public class MainActivity extends AppCompatActivity {
         if (error == null) {
             log("来源端已开启：" + service.sourceStatusLine());
         } else {
-            detailText.setText(error);
             log("来源端起不来：" + error);
         }
         refreshSourceStatus();
@@ -547,17 +630,17 @@ public class MainActivity extends AppCompatActivity {
      */
     private void onCaptureRequest() {
         if (service == null) {
-            detailText.setText("后台服务还没就绪，稍等一下再点。");
+            addHint("后台服务还没就绪，稍等一下再点。");
             return;
         }
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
-            detailText.setText("这台手机的 Android 版本太老，内录需要 Android 10 及以上。");
+            setIfChanged(captureStatusText, "内录：这台手机的 Android 版本太老，内录需要 Android 10 及以上。");
             return;
         }
         MediaProjectionManager manager =
                 (MediaProjectionManager) getSystemService(MEDIA_PROJECTION_SERVICE);
         if (manager == null) {
-            detailText.setText("这台设备没有提供内录能力。");
+            setIfChanged(captureStatusText, "内录：这台设备没有提供内录能力。");
             return;
         }
         try {
@@ -565,7 +648,7 @@ public class MainActivity extends AppCompatActivity {
             log("请在系统弹框里点「立即开始」，手机才会把正在放的声音送出去");
         } catch (Exception e) {
             // 部分定制系统会把这一步拦下来（缺少系统组件、被安全策略禁止）
-            detailText.setText("打不开内录授权框：" + e);
+            setIfChanged(captureStatusText, "内录：打不开授权框 —— " + e);
             Log.w(TAG, "createScreenCaptureIntent 失败", e);
         }
     }
@@ -585,9 +668,9 @@ public class MainActivity extends AppCompatActivity {
         boolean ok = service.hasCaptureGrant();
         log(ok ? "内录已授权：PC 端可以拉「手机内录」了" : "内录授权被取消");
         if (!ok) {
-            detailText.setText("内录没被授权：想要电脑拉手机正在放的声音，需要同意那个系统弹框。");
+            setIfChanged(captureStatusText, "内录：没被授权 —— 想要电脑拉手机正在放的声音，需要同意那个系统弹框。");
         } else if (!service.sourceRunning()) {
-            detailText.setText("内录已允许。别忘了点上面的「开启来源端」，电脑才连得进来。");
+            setIfChanged(captureStatusText, "内录：已允许。别忘了点上面的「开启来源端」，电脑才连得进来。");
         }
         refreshSourceStatus();
     }
@@ -636,6 +719,41 @@ public class MainActivity extends AppCompatActivity {
                 : "本机地址：" + addresses);
     }
 
+    // ========== 小工具 ==========
+
+    private static String text(TextInputEditText view) {
+        return view.getText() == null ? "" : view.getText().toString();
+    }
+
+    private static String percent(float value) {
+        return Math.round(value * 100) + "%";
+    }
+
+    /**
+     * 取当前主题下某个属性的颜色值。
+     *
+     * 用它而不是写死颜色：同一张卡片在浅色与深色下都要能看清，而这两种模式的「错误色」
+     * 与「次要文字色」是两个不同的值；写死一组的后果是另一种模式下字看不清。
+     */
+    private int themeColor(int attr) {
+        android.util.TypedValue value = new android.util.TypedValue();
+        if (getTheme().resolveAttribute(attr, value, true)) {
+            return value.data;
+        }
+        return 0;
+    }
+
+    /**
+     * 把音量对到滑条的刻度上。
+     *
+     * Slider 要求设进去的值正好落在 stepSize 的整数倍上，否则直接抛。
+     * 存下来的偏好可能来自旧版本或被手改过，所以在这里量化一次——崩溃比音量差一格严重得多。
+     */
+    private static float snapVolume(float value) {
+        float snapped = Math.round(value / VOLUME_STEP) * VOLUME_STEP;
+        return Math.max(0f, Math.min(1f, snapped));
+    }
+
     private static void setIfChanged(TextView view, String text) {
         if (view != null && !text.contentEquals(view.getText())) view.setText(text);
     }
@@ -663,7 +781,7 @@ public class MainActivity extends AppCompatActivity {
             // 权限只是流程中的一道，不该让他为同一件事点两次
             onSourceToggle();
         } else {
-            detailText.setText("没有录音权限，手机没法当音源。");
+            setIfChanged(sourceStatusText, "来源端：没有录音权限，手机没法当音源。");
         }
     }
 

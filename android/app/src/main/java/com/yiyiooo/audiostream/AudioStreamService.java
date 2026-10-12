@@ -22,23 +22,30 @@ import com.yiyiooo.audiostream.discovery.PcDiscovery;
 import com.yiyiooo.audiostream.discovery.PcInfo;
 import com.yiyiooo.audiostream.player.AudioSinkFactory;
 import com.yiyiooo.audiostream.player.AudioTrackSinkFactory;
-import com.yiyiooo.audiostream.player.PlaybackSession;
-import com.yiyiooo.audiostream.protocol.AudioFormat;
-import com.yiyiooo.audiostream.pull.PullSession;
 import com.yiyiooo.audiostream.pull.PullState;
+import com.yiyiooo.audiostream.route.PlaybackRoute;
+import com.yiyiooo.audiostream.route.RouteConfig;
 import com.yiyiooo.audiostream.source.CaptureGrant;
 import com.yiyiooo.audiostream.source.DeviceSourceProvider;
 import com.yiyiooo.audiostream.source.SourceServer;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /**
- * 前台服务：把播放端的整个生命周期管起来——发现、连接、播放、断开、断线重连。
+ * 前台服务：把两端都管起来。
  *
- * UI 通过 {@link #bindService} 拿到 {@link LocalBinder}，设置 {@link Listener} 后
- * 调 {@link #discover} 与 {@link #connect}，状态变化自然走回调回来，不轮询。
+ * **播放端是多路的**：{@link #routes} 里每一路都有自己的会话、声卡、音量与重连节奏
+ * （见 {@link PlaybackRoute}）。服务本身只负责三件事——增删改这一组路由、把变化通知给界面、
+ * 让通知栏那句话跟上。一路的电脑关掉不该影响另一路，所以凡是「这一路自己的」状态都不放在服务上。
+ *
+ * **来源端是单例的**：手机只有一个麦克风、一路内录，做成多份没有意义。
+ *
+ * UI 通过 {@link #bindService} 拿到 {@link LocalBinder}，设置 {@link Listener} 后调
+ * {@link #discover}、{@link #addRoute} 等，状态变化走 {@link Listener#onRoutesChanged} 回来，不轮询。
  */
 public final class AudioStreamService extends Service {
 
@@ -49,9 +56,8 @@ public final class AudioStreamService extends Service {
     /** 与 MainActivity 同一个标签：一次联调里界面事件与服务事件能按时间排在一起看。 */
     private static final String TAG = "AudioStream";
 
-    // --- 重连 ---
-    private static final long RECONNECT_BASE_MS = 1000L;
-    private static final long RECONNECT_CAP_MS  = 30000L;
+    /** 滑条拖动时音量会连着改几十次，落盘去抖一下，只写最后一次。 */
+    private static final long PERSIST_DEBOUNCE_MS = 400L;
 
     // --- Binder ---
     public class LocalBinder extends Binder {
@@ -62,11 +68,17 @@ public final class AudioStreamService extends Service {
 
     /** UI 要实现的回调（全在主线程）。 */
     public interface Listener {
-        void onState(PullState state, String detail);
-        void onFormat(AudioFormat format);
-        void onPlaybackFailed(String reason);
+        /**
+         * 路由集合或某一路的状态变了，界面该重绘了。
+         *
+         * 把「状态、格式、播放失败」合并成一条：界面本来就是整块重绘的，分开三个回调
+         * 只会让它在同一瞬间被叫三次。
+         */
+        void onRoutesChanged();
+
         /** 发现完成——设备列表与 PC 身份。 */
         void onDevices(List<DeviceInfo> devices, PcInfo info);
+
         /** 发现失败——reason 已经是中文。 */
         void onDiscoveryFailed(String reason);
     }
@@ -80,24 +92,13 @@ public final class AudioStreamService extends Service {
     private PcDiscovery discoveryClient;
     private final AudioSinkFactory sinkFactory = new AudioTrackSinkFactory();
 
-    private volatile PullSession pull;
-    private volatile PlaybackSession playback;
-    private volatile boolean intentionalStop;
+    /**
+     * 当前所有拉取路。用 CopyOnWriteArrayList：读它的地方（界面每秒刷新计数、通知文案）
+     * 远比改它的地方多，而每次改动本来就要通知界面重绘，复制的代价可以忽略。
+     */
+    private final List<PlaybackRoute> routes = new CopyOnWriteArrayList<PlaybackRoute>();
 
-    // 重连
-    private volatile long reconnectDelay = RECONNECT_BASE_MS;
-    private Runnable reconnectTask;
-
-    // 当前连接会话参数（重连要用同一组）
-    private volatile String sessionHost;
-    private volatile String sessionDeviceId;
-    private volatile String sessionDeviceName;
-
-    // 缓存最新状态
-    private volatile PullState state = PullState.IDLE;
-    private volatile String stateDetail = PullState.IDLE.label();
-    private volatile AudioFormat format;
-    private volatile String lastError;
+    private final Runnable persistTask = () -> persistRoutes();
 
     private volatile Listener listener;
 
@@ -115,6 +116,22 @@ public final class AudioStreamService extends Service {
      * 直接再调一次 startForeground 换类型是没用的（这个坑不报错，只是不生效）。
      */
     private int foregroundTypesApplied;
+
+    /** 一路的状态变化都汇到这里：记日志、通知界面、更新通知栏。 */
+    private final PlaybackRoute.Listener routeListener = new PlaybackRoute.Listener() {
+        @Override
+        public void onState(PlaybackRoute route, PullState state, String detail) {
+            Log.i(TAG, "第「" + route.config().sourceLabel() + "」路：" + state + " "
+                    + (detail == null ? "" : detail));
+            notifyRoutesChanged();
+        }
+
+        @Override
+        public void onPlaybackFailed(PlaybackRoute route, String reason) {
+            Log.w(TAG, "第「" + route.config().sourceLabel() + "」路播放失败：" + reason);
+            notifyRoutesChanged();
+        }
+    };
 
     // ========== Service 生命周期 ==========
 
@@ -141,14 +158,13 @@ public final class AudioStreamService extends Service {
         }
         sourceProvider = new DeviceSourceProvider(this);
         Log.i(TAG, "服务已创建");
+        restoreRoutes();
     }
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
         Log.i(TAG, "服务被启动，转前台");
         syncForeground();
-        // 如果是从通知栏启动了 MainActivity，intent 可能带 flag
-        // 目前只保证前台服务跑着
         return START_STICKY;
     }
 
@@ -160,10 +176,16 @@ public final class AudioStreamService extends Service {
 
     @Override
     public void onDestroy() {
-        intentionalStop = true;
-        cancelReconnect();
+        for (PlaybackRoute route : routes) {
+            try {
+                route.stop();
+            } catch (Exception e) {
+                Log.w(TAG, "停止一路时出错：" + e);
+            }
+        }
+        routes.clear();
+        mainHandler.removeCallbacks(persistTask);
         executor.shutdownNow();
-        cleanup();
         closeSourceQuietly();
         DeviceSourceProvider provider = sourceProvider;
         sourceProvider = null;
@@ -172,7 +194,7 @@ public final class AudioStreamService extends Service {
         super.onDestroy();
     }
 
-    // ========== 公开 API（UI 线程调） ==========
+    // ========== 播放端：多路 ==========
 
     /** 设置一个监听者（仅一个）。传 null 取消。 */
     public void setListener(Listener l) {
@@ -182,10 +204,11 @@ public final class AudioStreamService extends Service {
     /**
      * 用用户填的地址去查对端身份与设备列表。结果走 {@link Listener#onDevices} 或
      * {@link Listener#onDiscoveryFailed}。
+     *
+     * 发现与「已经在跑的路」完全无关：它只是去问一次对方有什么设备，失败也不影响任何一路。
      */
     public void discover(final String host) {
-        final String normalizedHost = AppConfig.normalizeHost(host);
-        AppConfig.saveHost(this, host);
+        AppConfig.saveLastHost(this, host);
         executor.submit(() -> {
             try {
                 PcInfo info = discoveryClient.fetchInfo(host);
@@ -205,70 +228,87 @@ public final class AudioStreamService extends Service {
     }
 
     /**
-     * 连上指定对端设备，开始收音频并在本机播放。
-     * 已在连接中时会先断开旧的。
-     */
-    public void connect(final String host, final String deviceId, final String deviceName) {
-        final String tcpHost = AppConfig.normalizeHost(host);
-        AppConfig.saveHost(this, host);
-        AppConfig.saveDevice(this, deviceId, deviceName);
-        executor.submit(() -> doConnect(tcpHost, deviceId, deviceName));
-    }
-
-    /** 主动断开当前连接。如果在重连中，一并取消。 */
-    public void disconnect() {
-        intentionalStop = true;
-        cancelReconnect();
-        executor.submit(this::cleanup);
-    }
-
-    // --- 状态查询（UI 可能在任意线程调，值都是 volatile 打底） ---
-
-    public PullState state()         { return state; }
-    public String stateDetail()     { return stateDetail; }
-    public AudioFormat format()     { return format; }
-    public String lastError()       { return lastError; }
-    public boolean isPlaying() {
-        PlaybackSession pb = playback;
-        return pb != null && pb.isPlaying();
-    }
-    public int bufferedMs() {
-        PlaybackSession pb = playback;
-        return pb == null ? 0 : pb.bufferedMs();
-    }
-    public long underruns() {
-        PlaybackSession pb = playback;
-        return pb == null ? 0 : pb.underruns();
-    }
-    public long droppedBytes() {
-        PlaybackSession pb = playback;
-        return pb == null ? 0 : pb.droppedBytes();
-    }
-    public long writtenBytes() {
-        PlaybackSession pb = playback;
-        return pb == null ? 0 : pb.writtenBytes();
-    }
-
-    /**
-     * 设置播放输出的音量（0..1），并记住它。
+     * 加一路并立刻开始拉。返回 null 表示加上了，否则是面向用户的中文原因。
      *
-     * 只影响本应用播出去的声音，不动系统媒体音量——用户要的是「这台手机放电脑的声音小一点」，
-     * 而不是把整台手机的媒体音量压下去。
+     * 同一台电脑的同一块设备只允许一路：两路一模一样的声音叠在一起，用户听到的只是「变大了」，
+     * 完全看不出是自己加了两路。
      */
-    public void setVolume(float volume) {
-        float clamped = AppConfig.clampVolume(volume);
-        PlaybackSession pb = playback;
-        if (pb != null) pb.setVolume(clamped);
-        AppConfig.saveVolume(this, clamped);
+    public String addRoute(String host, String deviceId, String deviceName) {
+        String normalized = AppConfig.normalizeHost(host);
+        if (normalized.isEmpty() || deviceId == null || deviceId.isEmpty()) {
+            return "地址和设备都要选好才能加一路。";
+        }
+        String id = RouteConfig.key(normalized, deviceId);
+        for (PlaybackRoute existing : routes) {
+            if (existing.id().equals(id)) {
+                return "这一路已经在列表里了。";
+            }
+        }
+        AppConfig.saveLastHost(this, normalized);
+
+        PlaybackRoute route = new PlaybackRoute(
+                RouteConfig.create(normalized, deviceId, deviceName, AppConfig.DEFAULT_VOLUME),
+                sinkFactory, identity.id(), identity.name(), routeListener);
+        routes.add(route);
+        persistRoutes();
+        notifyRoutesChanged();
+        route.start();
+        syncForeground();
+        return null;
+    }
+
+    /** 停掉并移除一路。之后不会再自己连回来。 */
+    public void removeRoute(String id) {
+        for (PlaybackRoute route : routes) {
+            if (route.id().equals(id)) {
+                routes.remove(route);
+                try {
+                    route.stop();
+                } catch (Exception e) {
+                    Log.w(TAG, "停一路时出错：" + e);
+                }
+                break;
+            }
+        }
+        persistRoutes();
+        notifyRoutesChanged();
+        syncForeground();
     }
 
     /**
-     * 当前输出音量。没在播放时返回上次存下的值——界面刚打开、还没连上时滑条也该停在用户上次调的位置。
+     * 改一路的音量（0..1）。
+     *
+     * 只影响这一路播出去的声音，不动系统媒体音量，也不影响其它路——每路一块 AudioTrack、
+     * 各带自己的增益，所以这是天然的。
+     *
+     * 拖动滑条时调用会很密集，落盘做了去抖。
      */
-    public float volume() {
-        PlaybackSession pb = playback;
-        if (pb != null) return pb.volume();
-        return AppConfig.loadVolume(this);
+    public void setRouteVolume(String id, float volume) {
+        for (PlaybackRoute route : routes) {
+            if (route.id().equals(id)) {
+                route.setVolume(volume);
+                break;
+            }
+        }
+        schedulePersist();
+    }
+
+    /** 此刻的全部路（快照，界面拿它重绘整块列表）。 */
+    public List<PlaybackRoute> routes() {
+        return new ArrayList<PlaybackRoute>(routes);
+    }
+
+    public int routeCount() {
+        return routes.size();
+    }
+
+    /** 正在出声的路数。界面与通知都用它。 */
+    public int playingRouteCount() {
+        int playing = 0;
+        for (PlaybackRoute route : routes) {
+            if (route.state() == PullState.PLAYING) playing++;
+        }
+        return playing;
     }
 
     // ========== 来源端（手机当音源，让 PC 反过来拉） ==========
@@ -403,106 +443,46 @@ public final class AudioStreamService extends Service {
 
     // ========== 内部 ==========
 
-    private void doConnect(String host, String deviceId, String deviceName) {
-        // 旧的先放掉
-        cleanup();
-        intentionalStop = false;
-
-        sessionHost = host;
-        sessionDeviceId = deviceId;
-        sessionDeviceName = deviceName;
-
-        replayState(PullState.CONNECTING, PullState.CONNECTING.label());
-
-        // 播放层监听 → 转给 UI
-        PlaybackSession pb = new PlaybackSession(sinkFactory, new PlaybackSession.Listener() {
-            @Override
-            public void onState(PullState s, String detail) {
-                handleStateChange(s, detail);
-            }
-
-            @Override
-            public void onPlaybackFailed(String reason) {
-                lastError = reason;
-                mainHandler.post(() -> {
-                    Listener l = listener;
-                    if (l != null) l.onPlaybackFailed(reason);
-                });
-            }
-        });
-        playback = pb;
-
-        // tcpPort 传 0 让 PullSession 自己去全区间扫描
-        PullSession ps = new PullSession(host, 0, deviceId, deviceName,
-                identity.id(), identity.name(), pb);
-        pull = ps;
-        ps.start();
-    }
-
-    private void cleanup() {
-        PullSession ps = pull;
-        pull = null;
-        if (ps != null) try { ps.close(); } catch (Exception ignored) {}
-
-        PlaybackSession pb = playback;
-        playback = null;
-        if (pb != null) try { pb.close(); } catch (Exception ignored) {}
-    }
-
-    // PullSession 状态变化由 PlaybackSession.Listener.onState 传过来
-    private void handleStateChange(PullState s, String detail) {
-        state = s;
-        stateDetail = detail;
-        replayState(s, detail);
-
-        if (!intentionalStop && s == PullState.FAILED) {
-            scheduleReconnect();
-        } else if (s == PullState.PLAYING) {
-            reconnectDelay = RECONNECT_BASE_MS; // 连上了就重置退避
+    /**
+     * 把上次存下的那几路重新拉起来。
+     *
+     * 在 onCreate 里做：服务是被 Activity 启动或系统拉起的，两种情况下用户上次配的路都该接着跑，
+     * 而不是等他打开界面点一下。某一路的地址已经失效也不影响别的路——每路各连各的。
+     */
+    private void restoreRoutes() {
+        List<RouteConfig> saved = AppConfig.loadRoutes(this);
+        if (saved.isEmpty()) return;
+        Log.i(TAG, "恢复 " + saved.size() + " 路");
+        for (RouteConfig config : saved) {
+            routes.add(new PlaybackRoute(config, sinkFactory,
+                    identity.id(), identity.name(), routeListener));
         }
-    }
-
-    private void replayState(PullState s, String detail) {
-        mainHandler.post(() -> {
-            Listener l = listener;
-            if (l != null) l.onState(s, detail);
-        });
+        for (PlaybackRoute route : routes) {
+            route.start();
+        }
         updateNotification();
     }
 
-    // ---------- 重连 ----------
-
-    private void scheduleReconnect() {
-        cancelReconnect();
-        if (intentionalStop) return;
-        if (sessionHost == null || sessionHost.isEmpty()) return;
-
-        final String host = sessionHost;
-        final String devId = sessionDeviceId;
-        final String devName = sessionDeviceName;
-
-        String msg = "正在第 " + reconnectAttempt() + " 次重连…";
-        replayState(PullState.CONNECTING, msg);
-
-        reconnectTask = () -> {
-            if (intentionalStop) return;
-            doConnect(host, devId, devName);
-        };
-        mainHandler.postDelayed(reconnectTask, reconnectDelay);
-        reconnectDelay = Math.min(reconnectDelay * 2, RECONNECT_CAP_MS);
+    private void persistRoutes() {
+        List<RouteConfig> snapshot = new ArrayList<RouteConfig>();
+        for (PlaybackRoute route : routes) {
+            snapshot.add(route.config());
+        }
+        AppConfig.saveRoutes(this, snapshot);
     }
 
-    private int reconnectAttempt() {
-        long d = reconnectDelay;
-        int n = 0;
-        while (d > RECONNECT_BASE_MS) { n++; d /= 2; }
-        return n + 1;
+    /** 音量拖动时的落盘去抖：连着改变几十次，只写最后一次的值。 */
+    private void schedulePersist() {
+        mainHandler.removeCallbacks(persistTask);
+        mainHandler.postDelayed(persistTask, PERSIST_DEBOUNCE_MS);
     }
 
-    private void cancelReconnect() {
-        Runnable task = reconnectTask;
-        reconnectTask = null;
-        if (task != null) mainHandler.removeCallbacks(task);
+    private void notifyRoutesChanged() {
+        mainHandler.post(() -> {
+            Listener l = listener;
+            if (l != null) l.onRoutesChanged();
+        });
+        updateNotification();
     }
 
     // ---------- 通知 ----------
@@ -531,21 +511,36 @@ public final class AudioStreamService extends Service {
                 .build();
     }
 
-    /** 通知栏那句话：同时兼顾两端——可能在放声音，也可能在当音源，还可能两件事一起干。 */
+    /**
+     * 通知栏那句话：多路时要把「几路在响、几路连不上」说清，同时兼顾来源端。
+     * 这句话有长度限制，所以先挑最要紧的说。
+     */
     private String notificationText() {
-        PullState s = state;
-        if (s == PullState.PLAYING) {
-            return "正在从 " + (sessionHost != null ? sessionHost : "—") + " 播放";
+        StringBuilder text = new StringBuilder();
+        int playing = 0;
+        int failed = 0;
+        for (PlaybackRoute route : routes) {
+            PullState state = route.state();
+            if (state == PullState.PLAYING) playing++;
+            else if (state == PullState.FAILED) failed++;
         }
-        if (s == PullState.FAILED) {
-            return "连接失败";
+        if (playing > 0) text.append("正在播放 ").append(playing).append(" 路");
+        if (failed > 0) {
+            if (text.length() > 0) text.append("，");
+            text.append(failed).append(" 路连不上");
         }
+
         SourceServer server = sourceServer;
         if (server != null && server.isRunning()) {
+            if (text.length() > 0) text.append("；");
             int sessions = server.sessionCount();
-            return sessions == 0 ? "正在当音源（还没有人来拉）" : "正在给 " + sessions + " 台设备送声音";
+            text.append(sessions == 0 ? "正在当音源" : "给 " + sessions + " 台设备送声音");
         }
-        return s.label();
+
+        if (text.length() == 0) {
+            text.append(routes.isEmpty() ? "等待连接" : "正在连接…");
+        }
+        return text.toString();
     }
 
     private void updateNotification() {

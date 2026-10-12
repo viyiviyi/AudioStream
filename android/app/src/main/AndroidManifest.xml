@@ -28,8 +28,14 @@
          不存在「必须在 5 秒内画出第一帧」这个前提了。
          而 Material 的圆角、阴影与滑块拖动都依赖硬件加速，软件渲染下会退化成没有阴影、拖动发涩，
          两相权衡恢复默认。 -->
+    <!-- 图标与 PC 端是同一张：tools\IconTool.java 把 dist\icon.ico 转成各密度的 PNG 与
+         adaptive 前景，背景渐变也从那张图上下缘采样得来。换图标就重新跑一遍那个工具。
+         roundIcon 指向同一个资源：Android 7.1 起部分启动器会优先用它，而这张图本身的形状
+         已经接近圆角方形，裁圆后不丢内容。 -->
     <application
         android:allowBackup="false"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:supportsRtl="true"
         android:theme="@style/Theme.AudioStream"

@@ -2,112 +2,163 @@ package com.yiyiooo.audiostream;
 
 import android.content.Context;
 import android.content.SharedPreferences;
+import android.util.Log;
+
+import com.yiyiooo.audiostream.route.RouteConfig;
+
+import org.json.JSONArray;
+import org.json.JSONException;
+
+import java.util.ArrayList;
+import java.util.List;
 
 /**
- * 应用偏好，落盘到 SharedPreferences，存「用户选过、下次还想接着用」的几样东西：
- * 上次连的 PC 地址、上次选的来源设备（设备号 + 设备名）、播放输出音量、外观模式。
+ * 应用偏好，落盘到 SharedPreferences：一组拉取路由、上次填过的地址、外观模式。
  *
- * 本机显示名**不在这里**——那是 hitmachine 身份的一部分，归 {@link MachineIdentity} 管，
- * 改名不换 MachineId 的约束也由它保证。这里只记「连到哪、点了哪个设备」。
+ * 「一组路由」是本文件的主体：每一路各有自己的地址、设备与音量（见 {@link RouteConfig}），
+ * 所以这里存的是一份 JSON 数组而不是几个扁平的键。数组里每一项都自带地址，
+ * 意味着不同路可以来自不同的电脑——这正是「同时拉多个源」要的东西。
+ *
+ * 本机显示名**不在这里**——那是身份的一部分，归 {@link MachineIdentity} 管，
+ * 改名不换 MachineId 的约束也由它保证。
  *
  * 地址容错集中在 {@link #normalizeHost(String)}：允许用户直接粘一个
  * {@code http://ip:port/xxx} 进来，这里把它剥成光秃秃的 host，好给 TCP 连接用。
  */
 public final class AppConfig {
 
+    private static final String TAG = "AudioStream";
+
     private static final String STORE = "audiostream-prefs";
-    private static final String KEY_HOST = "host";
-    private static final String KEY_DEVICE_ID = "device_id";
-    private static final String KEY_DEVICE_NAME = "device_name";
-    private static final String KEY_VOLUME = "volume";
+
+    /** 当前格式：整组路由的 JSON 数组。 */
+    private static final String KEY_ROUTES = "routes";
+    /** 上次填过的地址。只用于「新加一路」时预填输入框，不参与任何一路的连接。 */
+    private static final String KEY_LAST_HOST = "last_host";
     private static final String KEY_THEME = "theme_mode";
 
+    // ---- 单路版本留下的键。只在迁移时读一次，读完就删 ----
+    private static final String KEY_LEGACY_HOST = "host";
+    private static final String KEY_LEGACY_DEVICE_ID = "device_id";
+    private static final String KEY_LEGACY_DEVICE_NAME = "device_name";
+    private static final String KEY_LEGACY_VOLUME = "volume";
+
     /** 输出音量的默认值：满增益。用户没调过就按原始音量放，不自作主张压低。 */
-    public static final float DEFAULT_VOLUME = 1f;
+    public static final float DEFAULT_VOLUME = RouteConfig.DEFAULT_VOLUME;
 
     /** 外观：跟随系统 / 强制浅色 / 强制深色。数值会落盘，定下来就不要再改。 */
     public static final int THEME_SYSTEM = 0;
     public static final int THEME_LIGHT = 1;
     public static final int THEME_DARK = 2;
 
-    private final String host;
-    private final String deviceId;
-    private final String deviceName;
-
-    private AppConfig(String host, String deviceId, String deviceName) {
-        this.host = host == null ? "" : host;
-        this.deviceId = deviceId == null ? "" : deviceId;
-        this.deviceName = deviceName == null ? "" : deviceName;
+    private AppConfig() {
     }
 
-    /** 读当前存着的偏好。没存过就是空串，绝不抛错。 */
-    public static AppConfig load(Context context) {
-        SharedPreferences store = store(context);
-        return new AppConfig(
-                store.getString(KEY_HOST, ""),
-                store.getString(KEY_DEVICE_ID, ""),
-                store.getString(KEY_DEVICE_NAME, ""));
-    }
-
-    /** 记下 PC 地址，来源设备选择保留不动。 */
-    public static AppConfig saveHost(Context context, String host) {
-        AppConfig current = load(context);
-        store(context).edit().putString(KEY_HOST, normalizeHost(host)).apply();
-        return new AppConfig(normalizeHost(host), current.deviceId, current.deviceName);
-    }
-
-    /** 记下上次选的来源设备，PC 地址保留不动。 */
-    public static AppConfig saveDevice(Context context, String deviceId, String deviceName) {
-        AppConfig current = load(context);
-        store(context).edit()
-                .putString(KEY_DEVICE_ID, deviceId == null ? "" : deviceId)
-                .putString(KEY_DEVICE_NAME, deviceName == null ? "" : deviceName)
-                .apply();
-        return new AppConfig(current.host,
-                deviceId == null ? "" : deviceId,
-                deviceName == null ? "" : deviceName);
-    }
-
-    /** 上一次填的 PC 地址（纯 host，已剥掉 scheme/端口/路径）。 */
-    public String host() {
-        return host;
-    }
-
-    /** 上一次选的来源设备号。空串表示用户还没选过。 */
-    public String deviceId() {
-        return deviceId;
-    }
-
-    /** 上一次选的来源设备名。 */
-    public String deviceName() {
-        return deviceName;
-    }
+    // ========== 路由列表 ==========
 
     /**
-     * 上次调的输出音量（0..1）。
+     * 读出全部路由。
      *
-     * 单独一组存取、不并进上面那个值对象：音量与「连到哪、点了哪个设备」没有关系，
-     * 为了多存一个数就把那三样东西的构造与三个工厂方法全带上一个音量参数，不划算。
+     * 首次在装有旧版本的机器上运行时，这里会顺手把旧的那一路搬过来——用户升级完不该发现自己
+     * 原来配好的那一路不见了，还得凭记忆重填一遍 IP 与设备。
      */
-    public static float loadVolume(Context context) {
-        return clampVolume(store(context).getFloat(KEY_VOLUME, DEFAULT_VOLUME));
+    public static List<RouteConfig> loadRoutes(Context context) {
+        SharedPreferences store = store(context);
+        String raw = store.getString(KEY_ROUTES, null);
+        if (raw != null) {
+            return parseRoutes(raw);
+        }
+        List<RouteConfig> migrated = migrateLegacyRoute(store);
+        // 立刻落成新格式并清掉旧键。清理是必须的：否则用户删掉迁移出来的这一路之后，
+        // 下次启动又会从旧键里把它复活出来。
+        saveRoutes(context, migrated);
+        store.edit()
+                .remove(KEY_LEGACY_HOST)
+                .remove(KEY_LEGACY_DEVICE_ID)
+                .remove(KEY_LEGACY_DEVICE_NAME)
+                .remove(KEY_LEGACY_VOLUME)
+                .apply();
+        return migrated;
     }
 
-    /** 记下输出音量。越界的值在这里就夹住，免得坏值一路带进声卡。 */
-    public static void saveVolume(Context context, float volume) {
-        store(context).edit().putFloat(KEY_VOLUME, clampVolume(volume)).apply();
+    /** 把整组路由写下去。传 null 或空表就是「一路都不剩」，这是用户全删光的正常状态。 */
+    public static void saveRoutes(Context context, List<RouteConfig> routes) {
+        JSONArray array = new JSONArray();
+        if (routes != null) {
+            for (RouteConfig route : routes) {
+                if (route == null) continue;
+                try {
+                    array.put(route.toJson());
+                } catch (JSONException e) {
+                    // 单写成失败不该拖垮整次保存：其余几路照存，用户至少不会一次丢掉全部配置
+                    Log.w(TAG, "一路配置写不进 JSON，跳过：" + route, e);
+                }
+            }
+        }
+        store(context).edit().putString(KEY_ROUTES, array.toString()).apply();
+    }
+
+    private static List<RouteConfig> parseRoutes(String raw) {
+        List<RouteConfig> routes = new ArrayList<RouteConfig>();
+        try {
+            JSONArray array = new JSONArray(raw);
+            for (int i = 0; i < array.length(); i++) {
+                RouteConfig route = RouteConfig.fromJson(array.optJSONObject(i));
+                // 缺地址或缺设备号的条目会在 fromJson 里变成 null，这里直接跳过
+                if (route != null) routes.add(route);
+            }
+        } catch (JSONException e) {
+            // 偏好被写坏了：当成没有路由，而不是让应用一打开就崩。
+            // 用户重配一次的代价，远小于一个打不开的应用。
+            Log.w(TAG, "路由列表解析失败，按空处理", e);
+        }
+        return routes;
     }
 
     /**
-     * 把音量夹进 0..1。
-     * NaN 也当默认值处理：它多半来自早期版本写坏的偏好，夹成 0 会让用户以为程序坏了，夹成 1 更安全。
+     * 把单路版本留下的那几个键搬成一路。
+     *
+     * 地址即使没有配套的设备号也留下来（写进「上次填过的地址」）：用户多半只是没选过设备，
+     * 让他新加一路时不用重新敲一遍 IP。
+     */
+    private static List<RouteConfig> migrateLegacyRoute(SharedPreferences store) {
+        List<RouteConfig> routes = new ArrayList<RouteConfig>();
+        String host = normalizeHost(store.getString(KEY_LEGACY_HOST, ""));
+        String deviceId = store.getString(KEY_LEGACY_DEVICE_ID, "");
+        if (host.isEmpty()) return routes;
+
+        store.edit().putString(KEY_LAST_HOST, host).apply();
+        if (deviceId.isEmpty()) return routes;
+
+        routes.add(RouteConfig.create(host, deviceId,
+                store.getString(KEY_LEGACY_DEVICE_NAME, ""),
+                store.getFloat(KEY_LEGACY_VOLUME, RouteConfig.DEFAULT_VOLUME)));
+        return routes;
+    }
+
+    // ========== 上次填过的地址 ==========
+
+    /** 上次填过的地址，用来给「新加一路」的输入框预填。没填过就是空串。 */
+    public static String loadLastHost(Context context) {
+        return store(context).getString(KEY_LAST_HOST, "");
+    }
+
+    /** 记下这次填的地址。它不影响已经在跑的任何一路。 */
+    public static void saveLastHost(Context context, String host) {
+        store(context).edit().putString(KEY_LAST_HOST, normalizeHost(host)).apply();
+    }
+
+    // ========== 音量 ==========
+
+    /**
+     * 把音量夹进 0..1。转发给 {@link RouteConfig}——音量的合法范围由「一路的配置」定义，
+     * 这里再写一遍同样的规则只会多一处将来忘记同步的地方。
      */
     public static float clampVolume(float volume) {
-        if (Float.isNaN(volume)) return DEFAULT_VOLUME;
-        if (volume < 0f) return 0f;
-        if (volume > 1f) return 1f;
-        return volume;
+        return RouteConfig.clampVolume(volume);
     }
+
+    // ========== 外观 ==========
 
     /**
      * 外观模式。存的是「用户想要的」，与系统此刻的深浅色是两回事——
@@ -123,6 +174,8 @@ public final class AppConfig {
         int safe = (mode == THEME_LIGHT || mode == THEME_DARK) ? mode : THEME_SYSTEM;
         store(context).edit().putInt(KEY_THEME, safe).apply();
     }
+
+    // ========== 工具 ==========
 
     private static SharedPreferences store(Context context) {
         return context.getApplicationContext().getSharedPreferences(STORE, Context.MODE_PRIVATE);

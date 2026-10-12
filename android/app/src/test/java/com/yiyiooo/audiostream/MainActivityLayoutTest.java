@@ -27,7 +27,11 @@ import org.robolectric.annotation.Config;
  * 而布局 inflate 失败（资源名写错、Material 样式找不到、id 拼错）恰恰是最常见的一类低级错误，
  * 它不需要屏幕就能验。
  *
- * 它验不了「好不好看」——那只能靠人眼。它验的是「还在不在、文案有没有被删掉、默认值对不对」。
+ * 多路之后这里多了一层必要性：**每一路的卡片是同一个布局被 inflate 多次**，
+ * 里面的 id 在整屏里是重复的。id 拼错或漏了某个控件，只会在真机上表现为「某几路的滑条不动」，
+ * 而不是崩——那种问题没有这层测试基本抓不到。
+ *
+ * 它验不了「好不好看」——那只能靠人眼。它验的是「还在不在、文案有没有被删掉、范围对不对」。
  */
 @RunWith(RobolectricTestRunner.class)
 @Config(qualifiers = "w360dp-h640dp-xhdpi")
@@ -38,15 +42,17 @@ public class MainActivityLayoutTest {
     }
 
     @Test
-    public void 四张卡片的入口控件都在() {
+    public void 主界面的入口控件都在() {
         Activity activity = create();
         String[][] expected = {
                 {"地址输入", "hostInput"},
                 {"刷新按钮", "discoverButton"},
                 {"设备下拉", "deviceSpinner"},
-                {"连接按钮", "connectButton"},
-                {"音量滑条", "volumeSlider"},
-                {"音量数值", "volumeText"},
+                {"添加一路按钮", "addRouteButton"},
+                {"加一路的提示行", "addHintText"},
+                {"路由列表标题", "routesTitle"},
+                {"路由列表空提示", "routesEmptyText"},
+                {"路由列表容器", "routeContainer"},
                 {"开启来源端", "sourceButton"},
                 {"允许内录", "captureButton"},
                 {"主题三选", "themeGroup"},
@@ -58,23 +64,59 @@ public class MainActivityLayoutTest {
         }
     }
 
+    /** 单路时代的「连接」按钮与那根全局音量条已经不存在，取而代之的是每路一张卡片。 */
     @Test
-    public void 音量滑条默认满增益且能调到底() {
-        Slider slider = create().findViewById(R.id.volumeSlider);
-        assertEquals("默认应是满增益，不能凭空把用户的声音压低", 1f, slider.getValue(), 0.001f);
-        assertEquals("0（静音）必须是滑块能到的值", 0f, slider.getValueFrom(), 0.001f);
-        assertEquals("1（原始增益）必须是滑块能到的值", 1f, slider.getValueTo(), 0.001f);
+    public void 单路时代的控件已经不在主界面里() {
+        Activity activity = create();
+        assertEquals("「连接」按钮应已被「添加这一路」取代", 0,
+                activity.getResources().getIdentifier("connectButton", "id", activity.getPackageName()));
+        assertEquals("全局音量滑条应已下移到每一路的卡片里", 0,
+                activity.getResources().getIdentifier("volumeSlider", "id", activity.getPackageName()));
+    }
+
+    @Test
+    public void 每路卡片自带标题状态计数_音量滑条与停止按钮() {
+        Activity activity = create();
+        View card = activity.getLayoutInflater().inflate(R.layout.item_route, null, false);
+
+        assertNotNull(card.findViewById(R.id.routeTitle));
+        assertNotNull(card.findViewById(R.id.routeState));
+        assertNotNull(card.findViewById(R.id.routeDetail));
+        assertNotNull(card.findViewById(R.id.routeCounters));
+        assertNotNull(card.findViewById(R.id.routeStop));
+        assertNotNull("每一路都得有自己的音量滑条，这是「每个源单独设置音量」的落点",
+                card.findViewById(R.id.routeVolume));
+        assertNotNull(card.findViewById(R.id.routeVolumeText));
+
+        Slider slider = card.findViewById(R.id.routeVolume);
+        assertEquals("0（静音）必须是这一路能到的值", 0f, slider.getValueFrom(), 0.001f);
+        assertEquals("1（原始增益）必须是这一路能到的值", 1f, slider.getValueTo(), 0.001f);
+        assertEquals("步长需与 MainActivity.VOLUME_STEP 一致，否则 setValue 会抛",
+                0.05f, slider.getStepSize(), 0.0001f);
     }
 
     /**
-     * 这句提示是「单独调整输出音量」这个需求的落点：用户看到一个音量条，
-     * 首先会怀疑它是不是把整台手机的媒体音量改了。写在控件边上，他才不用去猜。
+     * 这句提示是「单独调整输出音量」这个需求的落点：用户看到一根音量条，
+     * 首先会怀疑它是不是把整台手机的媒体音量改了。写在滑条边上，他才不用去猜。
      */
     @Test
-    public void 音量滑条旁边必须写明它不动系统音量() {
-        View root = create().findViewById(android.R.id.content);
-        assertTrue("音量滑条旁应保留「不影响系统媒体音量」的说明，否则用户不知道它只作用于本应用",
-                hasText(root, "不影响系统媒体音量"));
+    public void 每路卡片写明它不动系统音量也不影响别的路() {
+        Activity activity = create();
+        View card = activity.getLayoutInflater().inflate(R.layout.item_route, null, false);
+        assertTrue("音量滑条旁应保留说明，否则用户不知道它只作用于这一路",
+                hasText(card, "不影响系统媒体音量"));
+        assertTrue("多路之后还要讲清它不影响别的路",
+                hasText(card, "也不影响别的路"));
+    }
+
+    /** 卡片是多份的，所以文案里不能出现「第几路」这种写死的话——那是运行时才填的。 */
+    @Test
+    public void 卡片标题由运行时填而不是写死在布局里() {
+        Activity activity = create();
+        View card = activity.getLayoutInflater().inflate(R.layout.item_route, null, false);
+        TextView title = card.findViewById(R.id.routeTitle);
+        assertEquals("标题应留空由代码填，写死了会让每一路都显示同一句话",
+                "", title.getText().toString());
     }
 
     /** 来源端那张卡片得告诉用户「这个地址填在电脑那边」，否则他不知道拿它干什么。 */
@@ -83,6 +125,14 @@ public class MainActivityLayoutTest {
         View root = create().findViewById(android.R.id.content);
         assertTrue("来源端卡片应保留「在电脑的配置页填」的引导",
                 hasText(root, "在电脑的配置页填"));
+    }
+
+    /** 还没加任何一路时得有一句话告诉他下一步做什么，否则那一块就是空白。 */
+    @Test
+    public void 没加任何一路时有引导文案() {
+        View root = create().findViewById(android.R.id.content);
+        assertTrue("空列表时应给出「怎么加一路」的引导",
+                hasText(root, "添加这一路"));
     }
 
     @Test

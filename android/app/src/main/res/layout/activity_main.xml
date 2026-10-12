@@ -6,8 +6,11 @@
   用代码拼出来之后，「这一行是哪个分组的」只能靠读 Java 推；写成布局文件，分组与层级一眼可见，
   Java 那边只剩「找到控件、接上回调」。
 
-  分组顺序按使用频率：先「从电脑拉声音」（最常用），再「让电脑拉这台手机」（来源端），
-  然后「外观」，日志放最后（它是给排错用的，不该占着屏幕上半部分）。
+  分组顺序按使用频率：先「加一路」（最常用的入口），再「正在播放的路」（加了之后最常看的地方），
+  然后来源端、外观，日志放最后（它是给排错用的，不该占着屏幕上半部分）。
+
+  「正在播放的路」那一段在布局里是空的，卡片由 MainActivity 按实际有几路动态塞进去
+  （每路一张 item_route）。写死在这里做不到——路数是用户加的。
 -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
@@ -36,7 +39,7 @@
             android:paddingStart="12dp"
             android:paddingEnd="12dp">
 
-            <!-- ============ 一、播放：从电脑拉声音 ============ -->
+            <!-- ============ 一、加一路：从电脑拉声音 ============ -->
 
             <com.google.android.material.card.MaterialCardView
                 android:layout_width="match_parent"
@@ -55,14 +58,14 @@
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="从电脑拉声音"
+                        android:text="加一路"
                         android:textAppearance="?attr/textAppearanceTitleMedium" />
 
                     <TextView
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="2dp"
-                        android:text="填电脑地址，选它的一块声卡，声音就会在这台手机上放出来"
+                        android:text="填一台电脑的地址，选它的一块声卡，声音就会在这台手机上放出来；可以连着加好几路，每一路的音量各自调"
                         android:textAppearance="?attr/textAppearanceBodySmall"
                         android:textColor="?attr/colorOnSurfaceVariant" />
 
@@ -114,85 +117,64 @@
                         android:minHeight="48dp" />
 
                     <com.google.android.material.button.MaterialButton
-                        android:id="@+id/connectButton"
+                        android:id="@+id/addRouteButton"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="12dp"
-                        android:text="连接" />
-
-                    <!-- 状态区：一眼看到「现在是什么情况」，下面几行是细节 -->
-                    <TextView
-                        android:id="@+id/statusText"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="16dp"
-                        android:text="未连接"
-                        android:textAppearance="?attr/textAppearanceTitleMedium" />
+                        android:text="添加这一路" />
 
                     <TextView
-                        android:id="@+id/detailText"
+                        android:id="@+id/addHintText"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
                         android:textAppearance="?attr/textAppearanceBodySmall"
                         android:textColor="?attr/colorError" />
-
-                    <TextView
-                        android:id="@+id/formatText"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:textAppearance="?attr/textAppearanceBodySmall"
-                        android:textColor="?attr/colorOnSurfaceVariant" />
-
-                    <TextView
-                        android:id="@+id/countersText"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:textAppearance="?attr/textAppearanceBodySmall"
-                        android:textColor="?attr/colorOnSurfaceVariant" />
-
-                    <!-- 音量：单独调这一路的输出，不动系统媒体音量 -->
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="16dp"
-                        android:baselineAligned="false"
-                        android:orientation="horizontal">
-
-                        <TextView
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_weight="1"
-                            android:text="播放音量"
-                            android:textAppearance="?attr/textAppearanceTitleSmall" />
-
-                        <TextView
-                            android:id="@+id/volumeText"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="100%"
-                            android:textAppearance="?attr/textAppearanceTitleSmall"
-                            android:textColor="?attr/colorPrimary" />
-                    </LinearLayout>
-
-                    <TextView
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="只调这台手机放出来的声音，不影响系统媒体音量"
-                        android:textAppearance="?attr/textAppearanceBodySmall"
-                        android:textColor="?attr/colorOnSurfaceVariant" />
-
-                    <com.google.android.material.slider.Slider
-                        android:id="@+id/volumeSlider"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:stepSize="0.05"
-                        android:value="1.0"
-                        android:valueFrom="0.0"
-                        android:valueTo="1.0" />
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 
-            <!-- ============ 二、来源：让电脑拉这台手机 ============ -->
+            <!-- ============ 二、正在播放的路（卡片由代码塞进来） ============ -->
+
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/routesCard"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                app:cardCornerRadius="16dp"
+                app:cardElevation="0dp"
+                app:strokeWidth="0dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="16dp">
+
+                    <TextView
+                        android:id="@+id/routesTitle"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="正在播放的路"
+                        android:textAppearance="?attr/textAppearanceTitleMedium" />
+
+                    <TextView
+                        android:id="@+id/routesEmptyText"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
+                        android:text="还没有加任何一路。在上面填地址、选设备，点「添加这一路」。"
+                        android:textAppearance="?attr/textAppearanceBodySmall"
+                        android:textColor="?attr/colorOnSurfaceVariant" />
+
+                    <LinearLayout
+                        android:id="@+id/routeContainer"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- ============ 三、来源：让电脑拉这台手机 ============ -->
 
             <com.google.android.material.card.MaterialCardView
                 android:layout_width="match_parent"
@@ -264,7 +246,7 @@
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 
-            <!-- ============ 三、外观 ============ -->
+            <!-- ============ 四、外观 ============ -->
 
             <com.google.android.material.card.MaterialCardView
                 android:layout_width="match_parent"
@@ -321,7 +303,7 @@
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 
-            <!-- ============ 四、日志 ============ -->
+            <!-- ============ 五、日志 ============ -->
 
             <com.google.android.material.card.MaterialCardView
                 android:layout_width="match_parent"
@@ -337,19 +319,11 @@
                     android:orientation="vertical"
                     android:padding="16dp">
 
-                    <LinearLayout
-                        android:layout_width="match_parent"
+                    <TextView
+                        android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:baselineAligned="false"
-                        android:orientation="horizontal">
-
-                        <TextView
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_weight="1"
-                            android:text="日志"
-                            android:textAppearance="?attr/textAppearanceTitleMedium" />
-                    </LinearLayout>
+                        android:text="日志"
+                        android:textAppearance="?attr/textAppearanceTitleMedium" />
 
                     <TextView
                         android:layout_width="match_parent"
