@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <!--
+      全应用只用这一个主题，日间与夜间都在它里面。
+
+      为什么不是两套资源：DayNight 主题自己会跟随系统的深浅色设置，而用户要的「手动指定浅色/深色」
+      由 AppConfig 里存的那个模式在 Activity 起来时交给 AppCompatDelegate.setDefaultNightMode 去覆盖系统。
+      资源限定符（values-night）只能表达「跟随系统」，表达不了「用户偏要反着来」，所以手动指定那一半
+      必须走代码；既然走了代码，跟随系统那一半也一并交给它，资源就只需要一套。
+
+      不写 ActionBar：顶栏由界面自己用 MaterialToolbar 搭，它要跟卡片、按钮共用同一套圆角与间距，
+      用系统 ActionBar 的话它自己那套尺寸改不动，界面上会出现两种风格。
+
+      Material3 在 Android 12 以上会取用户壁纸的动态色，低版本退回 Material 的默认配色；
+      两边的正文与强调色对比度都由主题保证，界面里不再写死任何颜色值。
+    -->
+    <style name="Theme.AudioStream" parent="Theme.Material3.DayNight.NoActionBar" />
+</resources>

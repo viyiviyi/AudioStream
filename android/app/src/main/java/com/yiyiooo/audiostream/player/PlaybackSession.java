@@ -41,6 +41,9 @@ public final class PlaybackSession implements PullSession.Listener, Closeable {
     private volatile boolean started;
     private Thread writer;
 
+    /** 输出音量，0..1。存在这一层而不是只写给 sink：重连会换一块声卡，新声卡不认识旧的那块。 */
+    private volatile float volume = 1f;
+
     private volatile String lastError;
     private volatile long underruns;
     private volatile long repeatedBytes;
@@ -70,6 +73,9 @@ public final class PlaybackSession implements PullSession.Listener, Closeable {
         this.buffer = new RingBuffer(capacity, value.blockAlign());
         try {
             this.sink = sinkFactory.create(value);
+            // 重连会重建声卡：不在这里补一次，用户调过的音量会悄悄退回默认，
+            // 而他只会觉得「断了重连之后声音突然变大了」
+            this.sink.setVolume(volume);
         } catch (AudioSinkFactory.UnsupportedAudioException e) {
             // 自己判定的「这种格式这台机器放不了」：消息本来就是写给用户看的，原样报上去
             lastError = e.getMessage();
@@ -203,6 +209,30 @@ public final class PlaybackSession implements PullSession.Listener, Closeable {
     }
 
     // ---------- 状态与计数（给界面看） ----------
+
+    /**
+     * 设置输出音量（0..1）。
+     *
+     * 值存在这一层而不是只写给 sink：重连会换一块新的声卡，新声卡不认识旧的那块，
+     * 重建时由 {@link #onFormat} 把它补上去。
+     */
+    public void setVolume(float value) {
+        float clamped = value < 0f ? 0f : (value > 1f ? 1f : value);
+        this.volume = clamped;
+        AudioSink out = sink;
+        if (out != null) {
+            try {
+                out.setVolume(clamped);
+            } catch (Exception ignored) {
+                // 声卡正在关：这条设置不生效也无妨，下一次重建时会带上
+            }
+        }
+    }
+
+    /** 当前输出音量，0..1。 */
+    public float volume() {
+        return volume;
+    }
 
     /** 当前音频格式，还没协商出来时为 null。 */
     public AudioFormat format() {

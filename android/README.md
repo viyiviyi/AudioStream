@@ -16,7 +16,7 @@ PC 端（`AudioStream.exe`，.NET Framework 4.7.2）的手机端。做两件事�
 ```powershell
 cd android
 powershell -File tools\setup-toolchain.ps1     # 建 tools-cache 目录联接 + 生成 local.properties
-powershell -File tools\build.ps1               # release（自签名）APK + 88 项单元测试
+powershell -File tools\build.ps1               # release（自签名）APK + 100 项单元测试
 powershell -File tools\build.ps1 -Variant debug
 powershell -File tools\build.ps1 -SkipTest     # 只打包
 powershell -File tools\build.ps1 -Install      # 顺手装到唯一在线的那台设备
@@ -35,9 +35,17 @@ tools-cache\android-sdk\platform-tools\adb.exe install -r dist\audiostream-andro
 ```
 
 工具链靠 `android\tools-cache` 这个**目录联接**指到 `C:\apps\dsh_workspace\pinyin-ime\tools-cache`，
-本工程自己不下载任何东西。运行期只用平台 API，不引 AndroidX；依赖只有测试用的
-`junit` + `robolectric`（JVM 单元测试）与 `androidx.test:runner` + `androidx.test.ext:junit`
-（真机用例），都不进 APK。
+本工程自己不下载任何东西。
+
+依赖按「进不进 APK」分两类：
+
+- **进 APK 的只有一个**：`com.google.android.material:material`，界面用（卡片、滑块、顶栏、
+  深浅色主题）。release 开了 R8 裁剪与资源压缩，实测包体 **1.7 MB**；不裁的话是 4.4 MB，
+  因为 Material 会带进 appcompat、androidx.core、fragment、recyclerview 一串传递依赖。
+- **不进 APK 的**：`junit` + `robolectric`（JVM 单元测试）、
+  `androidx.test:runner` + `androidx.test.ext:junit` + `androidx.test:rules`（真机用例）。
+
+协议层与音频层仍然只用平台 API——它们要逐字节对齐 C# 端，多一层封装只会多一个出错的地方。
 
 ## 协议
 
@@ -166,6 +174,23 @@ PC 端不在手边时，来源端也能独立验证——这是回归的第一�
 
 设备与开发机不在同一网段时，用 adb 端口转发把手机的两个口搬到本机（`adb forward tcp:22570 tcp:12570`
 之类），再让 `PcLikePull` 连 `127.0.0.1`。
+
+## 界面
+
+用 Material 组件搭的。深浅色跟随系统，也可以在「外观」卡片里手动指定浅色/深色，选择会落盘。
+主题只有一套资源（`Theme.Material3.DayNight.NoActionBar`）——资源限定符只能表达「跟随系统」，
+表达不了「用户偏要反着来」，所以手动那一半由 `AppCompatDelegate.setDefaultNightMode` 走代码。
+
+四张卡片对应四件事：**从电脑拉声音**（填地址 → 刷新设备列表 → 选来源 → 连接）、
+**让电脑拉这台手机的声音**（开启后卡片上显示本机地址，填进电脑那边的配置页）、**外观**、**日志**。
+
+**播放音量**单列一张卡片。它用 `AudioTrack.setVolume` 实现，只改本应用播出去的声音，
+**不动系统媒体音量**——用户要的是「这台手机放电脑的声音小一点」，而不是把整台手机的媒体音量压下去
+（后者会连他自己在放的音乐一起变轻，而且退出应用也不会恢复）。值存在偏好里，
+重连新建声卡时会补设一次（不补的话表现为「断了一次之后声音突然变大了」）。
+
+界面文案目前写在布局与 Java 里，没有抽进 `strings.xml`：这是全工程一致的做法，
+要抽就整工程一起抽，只抽布局会变成两套风格。
 
 ## 现状
 

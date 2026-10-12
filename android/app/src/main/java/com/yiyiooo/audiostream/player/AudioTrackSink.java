@@ -20,6 +20,9 @@ public final class AudioTrackSink implements AudioSink {
 
     private volatile boolean released;
 
+    /** 这条输出的音量，0..1。默认满增益，用户没调过就不动它。 */
+    private volatile float volume = 1f;
+
     /** 浮点输出时把字节搬进 float[] 用的缓冲：复用，不在每个音频块上分配。 */
     private float[] floatScratch = new float[0];
 
@@ -95,5 +98,32 @@ public final class AudioTrackSink implements AudioSink {
     @Override
     public int bufferSizeBytes() {
         return bufferSizeBytes;
+    }
+
+    /**
+     * 设置本应用输出的音量。
+     *
+     * 用 {@code AudioTrack.setVolume}（API 21+）而不是去动 AudioManager 的媒体音量：
+     * 前者只作用于这一块输出，别人的音乐、系统提示音都不受影响，退出应用后也不用恢复什么。
+     * 不用 {@code setStereoVolume}：界面上只有一根滑条，左右分开调没有意义。
+     *
+     * 值仍然记在字段里：声卡可能还没 play 或者正在被重建，等它可用了不会自动补上，
+     * 而字段在 {@link #play()} 之后依然有效（AudioTrack 的音量设置在 play 前后都保留）。
+     */
+    @Override
+    public void setVolume(float value) {
+        float clamped = value < 0f ? 0f : (value > 1f ? 1f : value);
+        this.volume = clamped;
+        if (released) return;
+        try {
+            track.setVolume(clamped);
+        } catch (IllegalStateException ignored) {
+            // 声卡正在被释放：这条设置丢了也无所谓，调用方重建时会再设一次
+        }
+    }
+
+    /** 当前音量，给测试与界面读取。 */
+    float volume() {
+        return volume;
     }
 }

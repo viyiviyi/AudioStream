@@ -1,8 +1,6 @@
 package com.yiyiooo.audiostream;
 
 import android.Manifest;
-import android.app.Activity;
-import android.app.AlertDialog;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
@@ -15,16 +13,22 @@ import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
 import android.util.Log;
-import android.view.Gravity;
 import android.widget.ArrayAdapter;
-import android.widget.Button;
-import android.widget.EditText;
-import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import androidx.appcompat.app.AlertDialog;
+import androidx.appcompat.app.AppCompatActivity;
+import androidx.appcompat.app.AppCompatDelegate;
+
+import com.google.android.material.appbar.MaterialToolbar;
+import com.google.android.material.button.MaterialButton;
+import com.google.android.material.button.MaterialButtonToggleGroup;
+import com.google.android.material.slider.Slider;
+import com.google.android.material.textfield.TextInputEditText;
+import com.google.android.material.textfield.TextInputLayout;
 import com.yiyiooo.audiostream.discovery.DeviceInfo;
 import com.yiyiooo.audiostream.discovery.PcInfo;
 import com.yiyiooo.audiostream.protocol.AudioFormat;
@@ -32,15 +36,19 @@ import com.yiyiooo.audiostream.pull.PullState;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 /**
- * 主界面：上半截是播放端（填 PC 地址 → 刷设备列表 → 选来源 → 连接/断开），
- * 下半截是来源端（把手机变成一台 AudioStream 机器，让 PC 反过来拉它的麦克风）。
+ * 主界面：一屏管两头——上半截是播放端（填电脑地址 → 刷设备列表 → 选来源 → 连接/断开 →
+ * 调这一路的音量），下半截是来源端（把手机变成一台 AudioStream 机器，让电脑反过来拉）。
  *
- * 布局纯代码构建，不引 AndroidX，和工程里其余部分保持一致。前台服务在后台把声音接住，
- * 这里只在屏幕上照实反映；锁屏或切后台再回来，读到的状态与服务是同一份。
+ * 界面走 Material 组件与 XML 布局（res/layout/activity_main.xml）；协议层与音频层仍然只用平台 API，
+ * 因为那两层要逐字节对齐 C# 端，多一层封装只会多一个出错的地方。
+ *
+ * 这里只做三件事：把控件找出来接上回调、把服务报上来的状态照实显示、把用户的选择落盘。
+ * 音频链路本身在前台服务里，锁屏或切后台再回来，读到的状态与服务是同一份。
  */
-public class MainActivity extends Activity {
+public class MainActivity extends AppCompatActivity {
 
     private static final int REQ_NOTIFICATIONS = 40;
 
@@ -80,20 +88,28 @@ public class MainActivity extends Activity {
         }
     };
 
-    // --- UI ---
-    private EditText hostInput;
+    // --- 播放端控件 ---
+    private TextInputLayout hostLayout;
+    private TextInputEditText hostInput;
+    private MaterialButton discoverButton;
     private Spinner deviceSpinner;
-    private Button discoverButton;
-    private Button connectButton;
+    private MaterialButton connectButton;
     private TextView statusText;
     private TextView detailText;
     private TextView formatText;
     private TextView countersText;
-    private TextView sourceAddressText;
-    private Button sourceButton;
+    private Slider volumeSlider;
+    private TextView volumeText;
+
+    // --- 来源端控件 ---
+    private TextView localAddressText;
+    private MaterialButton sourceButton;
+    private MaterialButton captureButton;
     private TextView sourceStatusText;
-    private Button captureButton;
     private TextView captureStatusText;
+
+    // --- 外观与日志 ---
+    private MaterialButtonToggleGroup themeGroup;
     private TextView logText;
     private ScrollView logScroll;
 
@@ -104,6 +120,9 @@ public class MainActivity extends Activity {
     private boolean tickRunning;
     private long lastCounterLogMs;
     private long lastWrittenBytes = -1;
+
+    /** 音量滑条的步长。取值与布局里 Slider 的 android:stepSize 必须一致，见 applyVolume。 */
+    private static final float VOLUME_STEP = 0.05f;
 
     // ========== 服务回调（主线程） ==========
 
@@ -178,7 +197,12 @@ public class MainActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        buildUi();
+        setContentView(R.layout.activity_main);
+        bindViews();
+        setupToolbar();
+        setupVolume();
+        setupTheme();
+
         requestNotificationPermissionIfNeeded();
 
         // 只绑定，不在这里启动前台服务。
@@ -204,7 +228,7 @@ public class MainActivity extends Activity {
         super.onDestroy();
     }
 
-    /** 服务连上后才有的动作：回填上次的地址。 */
+    /** 服务连上后才有的动作：回填上次的地址与音量。 */
     private void onServiceReady() {
         AppConfig config = AppConfig.load(this);
         if (!config.host().isEmpty()) {
@@ -215,120 +239,123 @@ public class MainActivity extends Activity {
         refreshSourceAddress();
     }
 
-    // ========== UI 构建 ==========
+    // ========== 控件装配 ==========
 
-    private void buildUi() {
-        int pad = (int) (getResources().getDisplayMetrics().density * 16);
-        float sp = 15;
+    private void bindViews() {
+        hostLayout = findViewById(R.id.hostLayout);
+        hostInput = findViewById(R.id.hostInput);
+        discoverButton = findViewById(R.id.discoverButton);
+        deviceSpinner = findViewById(R.id.deviceSpinner);
+        connectButton = findViewById(R.id.connectButton);
+        statusText = findViewById(R.id.statusText);
+        detailText = findViewById(R.id.detailText);
+        formatText = findViewById(R.id.formatText);
+        countersText = findViewById(R.id.countersText);
+        volumeSlider = findViewById(R.id.volumeSlider);
+        volumeText = findViewById(R.id.volumeText);
 
-        LinearLayout root = new LinearLayout(this);
-        root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding(pad, pad, pad, pad);
+        localAddressText = findViewById(R.id.localAddressText);
+        sourceButton = findViewById(R.id.sourceButton);
+        captureButton = findViewById(R.id.captureButton);
+        sourceStatusText = findViewById(R.id.sourceStatusText);
+        captureStatusText = findViewById(R.id.captureStatusText);
 
-        TextView title = text("音频流转 · 播放端 " + BuildConfig.VERSION_NAME, 18, Gravity.START);
-        root.addView(title);
+        themeGroup = findViewById(R.id.themeGroup);
+        logScroll = findViewById(R.id.logScroll);
+        logText = findViewById(R.id.logText);
 
-        MachineIdentity identity = MachineIdentity.load(this);
-        root.addView(text("本机：" + identity.name(), 12, Gravity.START));
-
-        // 地址行
-        hostInput = new EditText(this);
-        hostInput.setHint("对方电脑 IP（例如 192.168.1.10）");
-        hostInput.setTextSize(sp);
-        hostInput.setSingleLine(true);
-        root.addView(hostInput);
-
-        discoverButton = new Button(this);
-        discoverButton.setText("刷新设备列表");
-        discoverButton.setOnClickListener(v -> onDiscover());
-        root.addView(discoverButton);
-
-        // 设备选择
-        root.addView(text("选择来源设备（输出=电脑在放的 / 输入=电脑麦克风）", 13, Gravity.START));
-        deviceSpinner = new Spinner(this);
+        // 设备下拉先给一句话，等用户刷出列表再换成真选项
         deviceSpinner.setAdapter(new ArrayAdapter<>(this,
                 android.R.layout.simple_spinner_dropdown_item,
                 new String[]{"先刷新设备列表"}));
-        root.addView(deviceSpinner);
 
-        connectButton = new Button(this);
-        connectButton.setText("连接");
-        connectButton.setTextSize(sp);
+        discoverButton.setOnClickListener(v -> onDiscover());
         connectButton.setOnClickListener(v -> onConnectToggle());
-        root.addView(connectButton);
+        sourceButton.setOnClickListener(v -> onSourceToggle());
+        captureButton.setOnClickListener(v -> onCaptureRequest());
 
-        statusText = text("未连接", 16, Gravity.START);
-        root.addView(statusText);
-
-        detailText = text("", 13, Gravity.START);
-        detailText.setTextColor(0xFFC00000);
-        root.addView(detailText);
-
-        formatText = text("", 13, Gravity.START);
-        root.addView(formatText);
-
-        countersText = text("", 12, Gravity.START);
-        root.addView(countersText);
-
-        // --- 来源端：让 PC 反过来拉这台手机 ---
-        root.addView(text("— 让电脑拉这台手机的声音 —", 13, Gravity.START));
-
-        sourceAddressText = text("手机地址：读取中…", 12, Gravity.START);
-        root.addView(sourceAddressText);
-
-        sourceButton = new Button(this);
-        sourceButton.setText("开启来源端");
-        sourceButton.setTextSize(sp);
         // 后台服务没绑上之前点了也没有对象可操作，先灰着，服务一到就打开
         sourceButton.setEnabled(false);
-        sourceButton.setOnClickListener(v -> onSourceToggle());
-        root.addView(sourceButton);
-
-        sourceStatusText = text("来源端：未开启", 12, Gravity.START);
-        root.addView(sourceStatusText);
-
-        captureButton = new Button(this);
-        captureButton.setText("允许内录");
-        captureButton.setTextSize(sp);
-        // 服务没绑上之前点了没有对象可操作，先灰着，服务一到就打开
         captureButton.setEnabled(false);
-        captureButton.setOnClickListener(v -> onCaptureRequest());
-        root.addView(captureButton);
 
-        captureStatusText = text("内录：未授权", 12, Gravity.START);
-        root.addView(captureStatusText);
-
-        logScroll = new ScrollView(this);
-        logText = new TextView(this);
-        logText.setTextSize(11);
-        logText.setGravity(Gravity.START);
-        logText.setTextColor(0xFF885500);
-        logScroll.addView(logText, new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.MATCH_PARENT));
-        logScroll.setPadding(0, pad, 0, 0);
-        root.addView(logScroll, new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f));
-
-        setContentView(root);
         updateButtonState();
     }
 
-    private TextView text(String s, int size, int gravity) {
-        TextView view = new TextView(this);
-        view.setText(s);
-        view.setTextSize(size);
-        view.setGravity(gravity);
-        view.setPadding(0, 8, 0, 8);
-        return view;
+    private void setupToolbar() {
+        MaterialToolbar toolbar = findViewById(R.id.toolbar);
+        MachineIdentity identity = MachineIdentity.load(this);
+        // 副标题给版本号与本机名字：排查时第一件要问的就是「你装的是哪一版、这台机器是谁」
+        toolbar.setSubtitle("v" + BuildConfig.VERSION_NAME + "　·　本机 " + identity.name());
+    }
+
+    // ---------- 播放音量（只作用于本应用输出，不碰系统媒体音量） ----------
+
+    private void setupVolume() {
+        applyVolume(AppConfig.loadVolume(this));
+        volumeSlider.addOnChangeListener((slider, value, fromUser) -> {
+            if (!fromUser) return; // 代码设的值不必再回写一次
+            applyVolume(value);
+        });
+    }
+
+    private void applyVolume(float value) {
+        // Slider 要求设进去的值正好落在 stepSize 的整数倍上，否则直接抛。
+        // 存的偏好可能来自旧版本或被手改过，所以在这里量化一次再设——崩溃比音量差一格严重得多。
+        float snapped = Math.round(value / VOLUME_STEP) * VOLUME_STEP;
+        snapped = Math.max(0f, Math.min(1f, snapped));
+        if (Math.abs(volumeSlider.getValue() - snapped) > 1e-4) {
+            volumeSlider.setValue(snapped);
+        }
+        volumeText.setText(Math.round(snapped * 100) + "%");
+        if (service != null) {
+            service.setVolume(snapped); // 服务负责作用到当前会话并落盘
+        } else {
+            AppConfig.saveVolume(this, snapped); // 还没连上服务也不能丢用户的选择
+        }
+    }
+
+    // ---------- 外观 ----------
+
+    private void setupTheme() {
+        // 先把选中状态摆好，再挂监听：check() 自己会触发一次回调，
+        // 顺序反了就会在界面刚起来时按当前设置重设一次主题（多余的一次重建）。
+        themeGroup.check(themeButtonId(AppConfig.loadThemeMode(this)));
+        themeGroup.addOnButtonCheckedListener((group, checkedId, isChecked) -> {
+            if (!isChecked) return; // 只看「被选中」那一次，取消选中那一次忽略
+            int mode = themeModeOf(checkedId);
+            if (mode == AppConfig.loadThemeMode(this)) return;
+            AppConfig.saveThemeMode(this, mode);
+            AppCompatDelegate.setDefaultNightMode(toDelegateMode(mode));
+            // setDefaultNightMode 会让 Activity 自己重建，界面不需要手工刷新
+            Log.i(TAG, "外观改为：" + mode);
+        });
+    }
+
+    private static int themeButtonId(int mode) {
+        if (mode == AppConfig.THEME_LIGHT) return R.id.themeLight;
+        if (mode == AppConfig.THEME_DARK) return R.id.themeDark;
+        return R.id.themeSystem;
+    }
+
+    private static int themeModeOf(int buttonId) {
+        if (buttonId == R.id.themeLight) return AppConfig.THEME_LIGHT;
+        if (buttonId == R.id.themeDark) return AppConfig.THEME_DARK;
+        return AppConfig.THEME_SYSTEM;
+    }
+
+    private static int toDelegateMode(int mode) {
+        if (mode == AppConfig.THEME_LIGHT) return AppCompatDelegate.MODE_NIGHT_NO;
+        if (mode == AppConfig.THEME_DARK) return AppCompatDelegate.MODE_NIGHT_YES;
+        return AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM;
     }
 
     // ========== 交互 ==========
 
     private void onDiscover() {
-        String host = hostInput.getText().toString().trim();
+        String host = hostInput.getText() == null ? "" : hostInput.getText().toString().trim();
+        hostLayout.setError(null);
         if (host.isEmpty()) {
-            detailText.setText("请先填对方电脑 IP。");
+            showFieldError("请先填电脑地址。");
             return;
         }
         detailText.setText("正在发现…");
@@ -349,9 +376,10 @@ public class MainActivity extends Activity {
     }
 
     private void connectSelected() {
-        String host = hostInput.getText().toString().trim();
+        String host = hostInput.getText() == null ? "" : hostInput.getText().toString().trim();
+        hostLayout.setError(null);
         if (host.isEmpty()) {
-            detailText.setText("请先填对方电脑 IP。");
+            showFieldError("请先填电脑地址。");
             return;
         }
         int index = deviceSpinner.getSelectedItemPosition();
@@ -367,6 +395,12 @@ public class MainActivity extends Activity {
         Log.i(TAG, "开始连接 " + host + " 的设备 " + device.name() + "（" + device.id() + "）");
         ensureForegroundService();
         service.connect(host, device.id(), device.name());
+    }
+
+    /** 地址填错时把红字放在输入框下面而不是状态区：用户的视线本来就在那一格上。 */
+    private void showFieldError(String message) {
+        hostLayout.setError(message);
+        detailText.setText(message);
     }
 
     /**
@@ -400,7 +434,7 @@ public class MainActivity extends Activity {
             connectButton.setEnabled(false);
             return;
         }
-        // 服务就绪就必须把按钮打开：buildUi 里第一次调用它时服务还没绑上，
+        // 服务就绪就必须把按钮打开：bindViews 里第一次调用它时服务还没绑上，
         // 那时按钮被禁用了；这里若不显式打开，它会一直灰着——用户点了没反应，
         // 而界面上看不出任何原因（这一条只有真把界面跑起来才会暴露）。
         connectButton.setEnabled(true);
@@ -469,7 +503,7 @@ public class MainActivity extends Activity {
         refreshSourceStatus();
     }
 
-    // ========== 来源端（让 PC 反过来拉这台手机） ==========
+    // ========== 来源端（让电脑反过来拉这台手机） ==========
 
     private void onSourceToggle() {
         if (service == null) {
@@ -502,7 +536,7 @@ public class MainActivity extends Activity {
         refreshSourceAddress();
     }
 
-    // ---------- 内录（把手机正在放的声音给 PC 拉） ----------
+    // ---------- 内录（把手机正在放的声音给电脑拉） ----------
 
     /**
      * 点「允许内录」：请系统弹一次授权框。
@@ -559,7 +593,7 @@ public class MainActivity extends Activity {
     }
 
     /**
-     * 刷来源端那两行。它跟着 tick 跑，所以每处 setText 都要先比内容——
+     * 刷来源端那几行。它跟着 tick 跑，所以每处 setText 都要先比内容——
      * 无条件 setText 会让窗口一直重绘：费电，而且自动化工具永远等不到空闲，界面读不出来。
      */
     private void refreshSourceStatus() {
@@ -592,14 +626,14 @@ public class MainActivity extends Activity {
 
     /**
      * 地址要枚举网卡，只在服务就绪与开关来源端时刷一次，不跟着 tick 每 500ms 跑。
-     * 用户真正需要它的时刻就是「要去 PC 那边填地址」的时候。
+     * 用户真正需要它的时刻就是「要去电脑那边填地址」的时候。
      */
     private void refreshSourceAddress() {
-        if (sourceAddressText == null || service == null) return;
+        if (localAddressText == null || service == null) return;
         String addresses = service.localAddresses();
-        setIfChanged(sourceAddressText, addresses.isEmpty()
-                ? "手机地址：没找到可用的 IPv4（是不是没连上网？）"
-                : "手机地址：" + addresses + "　（填到 PC 端的「电脑 IP」里）");
+        setIfChanged(localAddressText, addresses.isEmpty()
+                ? "本机地址：没找到可用的 IPv4（是不是没连上网？）"
+                : "本机地址：" + addresses);
     }
 
     private static void setIfChanged(TextView view, String text) {
@@ -633,6 +667,7 @@ public class MainActivity extends Activity {
         }
     }
 
+    @SuppressWarnings("unused")
     private void toast(String message) {
         Toast.makeText(this, message, Toast.LENGTH_SHORT).show();
     }

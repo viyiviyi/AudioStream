@@ -3,9 +3,11 @@
 // 目标一（播放端）：手机连上 PC 的 AudioStream.exe，选它的某个音频设备，把声音拉到本机播放。
 // 目标二（来源端）：手机把麦克风与内录做成一台「AudioStream 机器」，让 PC 反过来拉。
 //
-// 依赖刻意只有两个：junit 与 robolectric（都在本机 Gradle 缓存里）。
-// 网络、音频、协议全部用平台 API（java.net / AudioTrack / AudioRecord / ServerSocket），
-// 不引 AndroidX 与第三方库——协议部分要逐字节对齐 C# 端，多一层封装只会多一个出错的地方。
+// 依赖只有两类：
+//   · 界面用 AndroidX Material（卡片、滑块、顶栏、深浅色主题）——这是全工程唯一引入 AndroidX 的地方；
+//   · 测试用 junit 与 robolectric（都在本机 Gradle 缓存里）。
+// 网络、音频、协议仍然全部用平台 API（java.net / AudioTrack / AudioRecord / ServerSocket），
+// 不引第三方库——协议部分要逐字节对齐 C# 端，多一层封装只会多一个出错的地方。
 plugins {
     id 'com.android.application'
 }
@@ -50,7 +52,14 @@ android {
             applicationIdSuffix '.debug'
         }
         release {
-            minifyEnabled false
+            // R8 裁剪：Material 会带进 appcompat、androidx.core、fragment、recyclerview 一串传递依赖，
+            // 不裁的话这些类整包进 APK（实测 4.4 MB）。裁剪后只留真正被用到的。
+            // shrinkResources 一并打开：资源同理，Material 带进来的样式与 drawable 大多用不上。
+            // 不另写 proguard-rules.pro：工程里没有自定义反射，AndroidX/Material 的 consumer 规则
+            // 由 R8 自动应用，多写一个文件只会多一处将来忘记同步的地方。
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt')
             signingConfig signingConfigs.local
         }
     }
@@ -105,6 +114,11 @@ android {
 }
 
 dependencies {
+    // 界面用 Material 组件（卡片、滑块、顶栏、深浅色主题）。
+    // 它会带进 appcompat 等传递依赖，release APK 从几十 KB 涨到约 1.5 MB。
+    // 只影响界面那两条 Activity/布局；协议层与音频层一行未动，仍然只用平台 API。
+    implementation 'com.google.android.material:material:1.11.0'
+
     testImplementation 'junit:junit:4.13.2'
     // 在 JVM 上跑真实的 Android 类（AudioTrack / AudioRecord 有 shadow 实现），
     // 让「格式映射、播放装配」这些胶水也能自动化验证，不必每次都上模拟器。

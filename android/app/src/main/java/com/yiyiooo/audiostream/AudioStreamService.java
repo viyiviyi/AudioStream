@@ -249,6 +249,28 @@ public final class AudioStreamService extends Service {
         return pb == null ? 0 : pb.writtenBytes();
     }
 
+    /**
+     * 设置播放输出的音量（0..1），并记住它。
+     *
+     * 只影响本应用播出去的声音，不动系统媒体音量——用户要的是「这台手机放电脑的声音小一点」，
+     * 而不是把整台手机的媒体音量压下去。
+     */
+    public void setVolume(float volume) {
+        float clamped = AppConfig.clampVolume(volume);
+        PlaybackSession pb = playback;
+        if (pb != null) pb.setVolume(clamped);
+        AppConfig.saveVolume(this, clamped);
+    }
+
+    /**
+     * 当前输出音量。没在播放时返回上次存下的值——界面刚打开、还没连上时滑条也该停在用户上次调的位置。
+     */
+    public float volume() {
+        PlaybackSession pb = playback;
+        if (pb != null) return pb.volume();
+        return AppConfig.loadVolume(this);
+    }
+
     // ========== 来源端（手机当音源，让 PC 反过来拉） ==========
 
     /**

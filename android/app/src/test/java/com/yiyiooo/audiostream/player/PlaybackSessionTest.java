@@ -39,6 +39,9 @@ public class PlaybackSessionTest {
         final ByteArrayOutputStream written = new ByteArrayOutputStream();
         volatile boolean playing;
         volatile boolean released;
+        /** 最后一次被设置的音量，以及被设过多少次——用来验「重建声卡后会补设」。 */
+        volatile float volume = 1f;
+        volatile int volumeSetCount;
 
         @Override
         public int write(byte[] data, int offset, int length) {
@@ -60,6 +63,12 @@ public class PlaybackSessionTest {
         @Override
         public int bufferSizeBytes() {
             return 3840;
+        }
+
+        @Override
+        public void setVolume(float value) {
+            volume = value;
+            volumeSetCount++;
         }
     }
 
@@ -118,6 +127,39 @@ public class PlaybackSessionTest {
         long deadline = System.currentTimeMillis() + 2000;
         while (!factory.sink.playing && System.currentTimeMillis() < deadline) sleep(10);
         assertTrue("攒够了却没起播", factory.sink.playing);
+        session.close();
+    }
+
+    @Test
+    public void 重连重建声卡时会补上已设置的音量() {
+        FakeFactory factory = new FakeFactory();
+        PlaybackSession session = new PlaybackSession(factory, new Recorder());
+        session.onFormat(FORMAT_48K_16_2);
+
+        session.setVolume(0.35f);
+        assertEquals("设置后应立刻作用到声卡", 0.35f, factory.sink.volume, 0.0001f);
+
+        // 重连会重建声卡。把 sink 上的值打回默认，再协商一次格式，看旧音量有没有被补上——
+        // 不补的话，用户会觉得「断了重连之后声音突然变大了」，而界面上滑条还停在原位。
+        factory.sink.volume = 1f;
+        int setCountBefore = factory.sink.volumeSetCount;
+        session.onFormat(FORMAT_48K_16_2);
+
+        assertEquals("重建声卡后必须把旧音量补上", 0.35f, factory.sink.volume, 0.0001f);
+        assertTrue("重建后应当重新设过一次", factory.sink.volumeSetCount > setCountBefore);
+        session.close();
+    }
+
+    @Test
+    public void 音量超出范围会被夹回来() {
+        FakeFactory factory = new FakeFactory();
+        PlaybackSession session = new PlaybackSession(factory, new Recorder());
+        session.onFormat(FORMAT_48K_16_2);
+
+        session.setVolume(5f);
+        assertEquals(1f, session.volume(), 0.0001f);
+        session.setVolume(-2f);
+        assertEquals(0f, session.volume(), 0.0001f);
         session.close();
     }
 
