@@ -24,6 +24,14 @@ namespace AudioStream.AudioServer
         /// </summary>
         bool AudioFlowing { get; }
 
+        /// <summary>
+        /// 这一路的声音是从哪台机器拉来的（对端握手时报的机器号）。
+        /// 本机设备之间的流转不出本机，不构成跨机链路，返回 null。
+        /// 被拉取侧靠它判断「点单的是不是就是这一路的来源」——只有那种情况才会把对方的声音绕回去；
+        /// 只看「这块设备上有没有远程音频在放」会把不相干的第三方也一起挡掉，而那是多一个听众，不成环。
+        /// </summary>
+        string SourceMachineId { get; }
+
         /// <summary>此刻真的在出声的设备名。一路喂多块声卡时可能有好几个。</summary>
         List<string> ActiveDeviceNames { get; }
 

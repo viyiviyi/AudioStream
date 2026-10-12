@@ -56,6 +56,9 @@ namespace AudioStream.AudioServer
         /// <summary>对端身份，握手时拿到；界面靠它显示这条流来自哪台机器。</summary>
         public string RemoteMachineId { get { return _remoteMachineId; } }
 
+        /// <summary>这一路确实是跨机拉的，来源就是握手拿到的对端机器号。</summary>
+        public string SourceMachineId { get { return _remoteMachineId; } }
+
         /// <summary>对端计算机名，只用于显示。</summary>
         public string RemotePcName { get { return _remotePcName; } }
 

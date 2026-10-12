@@ -10,8 +10,9 @@ namespace AudioStream
         public static PlayerControl playerControl = new PlayerControl();
         public static void Init()
         {
-            // 被拉取侧要能问「本机是不是正把网络音频播到这个设备上」，好拦住会把声音绕回去的点单
-            tcpServer.NetworkPlaybackProbe = playerControl.IsPlayingRemoteAudioTo;
+            // 被拉取侧要能问「本机是不是正把『这台机器送来的』音频播到这个设备上」，
+            // 好拦住会把它自己的声音绕回去的点单。机器号是必须的：只看设备会把第三方也一起挡掉。
+            tcpServer.NetworkPlaybackProbe = playerControl.IsLoopFor;
             tcpServer.StartAsync();
             httpServer.StartAsync();
         }

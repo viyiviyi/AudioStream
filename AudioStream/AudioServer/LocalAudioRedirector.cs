@@ -41,6 +41,11 @@ namespace AudioStream
         /// <summary>此刻是不是真的有声音在往外放。刚起好还没收到采集数据时不算。</summary>
         public bool AudioFlowing { get { return isActive && group != null && group.IsActive; } }
 
+        /// <summary>
+        /// 本机设备之间的流转：声音没出过这台机器，采它不会绕回任何对端，所以永远是 null。
+        /// </summary>
+        public string SourceMachineId { get { return null; } }
+
         /// <summary>此刻真的在出声的设备名。全播时可能有好几个。</summary>
         public List<string> ActiveDeviceNames
         {

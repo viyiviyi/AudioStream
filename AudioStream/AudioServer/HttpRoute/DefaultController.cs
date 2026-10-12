@@ -147,8 +147,12 @@ namespace AudioStream.AudioServer.HttpRoute
         }
 
         /// <summary>
-        /// 冲突自检：这个设备此刻会不会因为「本机正把网络音频播到它上面」而被拒绝点单。
-        /// 界面拿它提前告诉用户哪个设备被占住了，排查时也用得着。
+        /// 冲突自检：这块设备此刻是不是正被本机的某一路远程播放占着。
+        /// 界面拿它提前告诉用户哪块设备上有别人的声音在放，排查时也用得着。
+        ///
+        /// 它回答的**不是**「我会不会被拒绝」：会不会被拒还得看是谁来点单——只有那一路远程音频的来源
+        /// 机器自己来采才会成环（见 TcpServer 里用 NetworkPlaybackProbe 的那处判断）。这里没人可问，
+        /// 所以给的是设备维度的事实：宁可多说一句，也不让界面漏报。
         /// </summary>
         [Route(HttpVerbs.Get, "/probe")]
         public HttpResult<object> Probe()
@@ -164,7 +168,7 @@ namespace AudioStream.AudioServer.HttpRoute
                     Resolved = device == null ? null : device.DeviceID,
                     Same = device != null && device.DeviceID == deviceId,
                     Wired = probe != null,
-                    Blocked = probe != null && probe(deviceId)
+                    Blocked = probe != null && InitServer.playerControl.IsPlayingRemoteAudioTo(deviceId)
                 }
             };
         }
@@ -335,7 +339,8 @@ namespace AudioStream.AudioServer.HttpRoute
         }
 
         /// <summary>
-        /// 改一条已有拉取的播放策略与目标设备。
+        /// 改一条已有拉取的来源设备、播放策略与目标设备。
+        /// 来源地址（IP）不在这里改：换一台机器等于换一路拉取，重新加一条比悄悄改地址清楚。
         /// 正在响的这一路会按新配置重新起来，所以中途会断一下再响。
         /// </summary>
         [Route(HttpVerbs.Post, "/players/update")]
@@ -346,7 +351,8 @@ namespace AudioStream.AudioServer.HttpRoute
             var request = await ReadBodyAsync<PlayerRequest>();
             string error;
             if (!Validate(request, out error)) return Fail(error);
-            if (!InitServer.playerControl.Update(id, ParsePolicy(request.Policy), request.Targets))
+            if (!InitServer.playerControl.Update(id, request.SourceDeviceID, request.SourceDeviceName,
+                ParsePolicy(request.Policy), request.Targets))
             {
                 return Fail("找不到这条拉取，或者没能按新的设备重新起来");
             }

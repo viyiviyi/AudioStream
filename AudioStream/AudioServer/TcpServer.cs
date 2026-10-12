@@ -57,7 +57,7 @@ namespace AudioStream
         /// 由 InitServer 接到播放控制上：靠它拦住「一边采这个设备给别人、一边又往这个设备放别人的声音」这种点单。
         /// 没接上时一律当作没有冲突，不影响原有功能。
         /// </summary>
-        public Func<string, bool> NetworkPlaybackProbe { get; set; }
+        public Func<string, string, bool> NetworkPlaybackProbe { get; set; }
 
         public async void StartAsync()
         {
@@ -307,11 +307,13 @@ namespace AudioStream
                 }
 
                 // 采播冲突：本机要把这个设备采给别人，同时又在往这个设备播从别处拉来的音频。
-                // 对方的声音会被本机重新采一遍再送回去，形成环路，这种点单直接拒。
+                // 成环的条件是「来点单的正是这一路远程音频的来源」：它送来的声音被本机重新采一遍再送回去，
+                // 在它那头放出来又采回来，就是啸叫。所以判据必须带上点单方的机器号——
+                // 只判断「这块设备上有远程音频在放」会把不相干的第三方也挡掉，而那只是多一个听众，不成环。
                 var probe = NetworkPlaybackProbe;
-                if (probe != null && probe(device.DeviceID))
+                if (probe != null && probe(device.DeviceID, session.Item.MachineId))
                 {
-                    Logger.Info($"拒绝来自 {session.Item.ClientIp} 的点单：本机正把网络音频播放到「{device.FriendlyName}」，采它会把声音绕回去");
+                    Logger.Info($"拒绝来自 {session.Item.ClientIp} 的点单：本机正把它送来的音频播放到「{device.FriendlyName}」，采它会把声音绕回去");
                     session.Item.Streaming = false;
                     SendText(session, "/Reject/loop", true);
                     session.Running = false;

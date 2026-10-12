@@ -67,6 +67,22 @@ namespace AudioStream.AudioServer
             return false;
         }
 
+        /// <summary>
+        /// 本机此刻会不会把 <paramref name="callerMachineId"/> 送来的声音绕回去：它送来的音频正被本机
+        /// 放给这块设备，而它又来采这块设备。采播冲突拦截用这个，不用上面那个设备维度的判断——
+        /// 上面那个会把不相干的第三方一起挡掉，而那只是多一个听众。
+        /// </summary>
+        public bool IsLoopFor(string deviceId, string callerMachineId)
+        {
+            if (string.IsNullOrEmpty(deviceId) || string.IsNullOrEmpty(callerMachineId)) return false;
+            foreach (var player in players.ToArray())
+            {
+                if (player == null) continue;
+                if (player.IsLoopSourceFor(deviceId, callerMachineId)) return true;
+            }
+            return false;
+        }
+
         public List<PlayerInfo> GetPlayerInfoList()
         {
             return playerInfos.Select(a=>a.Copy()).ToList();
@@ -145,16 +161,24 @@ namespace AudioStream.AudioServer
         }
 
         /// <summary>
-        /// 改一条已有记录的播放策略与目标设备。
+        /// 改一条已有记录的来源设备、播放策略与目标设备。
+        /// 来源地址（IP）不在这里改：换一台机器等于换一路拉取，重新加一条比悄悄改地址清楚。
         /// 这一路本来在跑就先收掉再按新配置起来，否则用户改完要等下次重启才生效。
         /// </summary>
-        public bool Update(string guid, PlaybackPolicy policy, IEnumerable<PlayTarget> targets)
+        public bool Update(string guid, string sourceDeviceID, string sourceDeviceName, PlaybackPolicy policy, IEnumerable<PlayTarget> targets)
         {
             var id = Guid.Parse(guid);
             var info = playerInfos.FirstOrDefault(a => a.ID == id);
             if (info == null) return false;
             var list = DistinctTargets(targets);
             if (list.Count == 0) return false;
+            // 来源设备号是空的表示这次请求没带来源（只改播放目标），保持原样，
+            // 不能顺手清掉——清掉之后这一路就再也起不来了。
+            if (!string.IsNullOrWhiteSpace(sourceDeviceID))
+            {
+                info.SourceDeviceID = sourceDeviceID;
+                info.SourceDeviceName = sourceDeviceName;
+            }
             info.Policy = policy;
             info.Targets.Clear();
             foreach (var target in list)

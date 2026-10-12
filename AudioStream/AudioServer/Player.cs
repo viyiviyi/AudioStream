@@ -427,6 +427,23 @@ namespace AudioStream.AudioServer
         }
 
         /// <summary>
+        /// 这一路此刻会不会把 <paramref name="callerMachineId"/> 送来的声音绕回去。
+        ///
+        /// 比 <see cref="PlaysRemoteAudioTo"/> 多问一句「来采的是谁」：只有「这块设备上此刻放着的远程音频
+        /// 正是这台机器送来的」才成环——它送来的声音被本机采一遍又送回去，在它那头放出来再采回来，
+        /// 就是啸叫。别的机器来采同一块设备只是多一个听众，不成环，不该被挡。
+        /// </summary>
+        public bool IsLoopSourceFor(string deviceId, string callerMachineId)
+        {
+            if (string.IsNullOrEmpty(callerMachineId)) return false;
+            if (!PlaysRemoteAudioTo(deviceId)) return false;
+            var source = audioRedirector == null ? null : audioRedirector.SourceMachineId;
+            // 来源未知（本机设备之间的流转、或者还没握手出来）时不算跨机环路：宁可放行也不误伤
+            if (string.IsNullOrEmpty(source)) return false;
+            return string.Equals(source, callerMachineId, StringComparison.OrdinalIgnoreCase);
+        }
+
+        /// <summary>
         /// 看门狗：这一路没在响就按退避节奏重新拉起来。
         /// 对端重启、网线拔了又插、声卡被别的程序抢走，用户都不该需要自己去界面上点一下。
         /// </summary>
