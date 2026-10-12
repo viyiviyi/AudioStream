@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- 连 PC 的 12570(HTTP) / 12670(TCP) -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- 前台服务以媒体播放类型运行：Android 14（API 34）强制前台服务必须声明类型 -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+    <!-- 来源端要长时间拿着麦克风，前台服务必须同时声明 microphone 类型；
+         光有 RECORD_AUDIO 不够——targetSdk 34 起，前台服务在后台访问麦克风要求类型匹配 -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+
+    <!-- 来源端要采麦克风（目标二），先声明；运行时还会再要一次授权 -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <!-- 音频链路跑在前台服务里，锁屏与切后台都不能断声 -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+
+    <!-- 界面只有几个原生控件（文本、按钮、下拉、日志），不需要 GPU。
+         显式关掉硬件加速，是为了不把首帧交给 RenderThread/gralloc：在图形栈慢或半坏的设备上
+         （模拟器、部分定制机）GL 调用会卡住几十秒，而 startForegroundService 只给 5 秒，
+         结果是应用一启动就 ANR、界面永远画不出来。软件渲染的界面在这种场景下反而是可靠的。 -->
+    <application
+        android:allowBackup="false"
+        android:hardwareAccelerated="false"
+        android:label="@string/app_name"
+        android:supportsRtl="true"
+        android:theme="@android:style/Theme.Material.Light.DarkActionBar"
+        android:usesCleartextTraffic="true">
+        <!-- usesCleartextTraffic：协议就是局域网里的裸 HTTP，没有 TLS，
+             Android 9 起默认禁明文，不禁用这一项连设备列表都拉不到 -->
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:label="@string/app_name">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <service
+            android:name=".AudioStreamService"
+            android:exported="false"
+            android:foregroundServiceType="mediaPlayback|microphone" />
+    </application>
+
+</manifest>
