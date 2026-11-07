@@ -200,7 +200,9 @@ namespace AudioStream
         /// </summary>
         private void HandleCommand(ClientSession session, string line)
         {
-            // 握手：报身份。对端身份等于本机身份时这路流必定绕回自己，就地断开。
+            // 握手：报身份。对端身份与本机相同不算拒绝理由——自连就是把本机一块设备的采集
+            // 送给本机另一块设备（内录、跨设备转发、把播放送进虚拟麦克风），这是正当用法。
+            // 真成环只有一种情况：来源设备正被这一路自己播放着，那由下面的采播冲突判据拦。
             if (line.StartsWith("/Hello/"))
             {
                 var parts = line.Split(new[] { '/' }, 4);
@@ -213,15 +215,6 @@ namespace AudioStream
                 }
                 session.Item.MachineId = machineId;
                 session.Item.PcName = pcName;
-                if (!string.IsNullOrEmpty(machineId) &&
-                    string.Equals(machineId, MachineIdentity.Id, StringComparison.OrdinalIgnoreCase))
-                {
-                    Logger.Info($"拒绝来自 {session.Item.ClientIp} 的自连：对端身份与本机相同，这条连接会把本机声音绕回本机");
-                    session.Item.Streaming = false;
-                    SendText(session, "/Reject/self", true);
-                    session.Running = false;
-                    return;
-                }
                 SendText(session, "/Hello/" + MachineIdentity.Id + "/" + Uri.EscapeDataString(MachineIdentity.Name ?? ""));
                 return;
             }

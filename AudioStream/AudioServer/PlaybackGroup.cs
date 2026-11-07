@@ -45,7 +45,12 @@ namespace AudioStream.AudioServer
         /// </summary>
         public int TargetBufferMs = 30;
 
-        /// <summary>缓冲空时先等这么久再补静音：网络抖动造成的短空档靠等就能过去，不必立刻出静音。</summary>
+        /// <summary>
+        /// 缓冲空时先等这么久再补帧。抖动造成的极短空档靠等就能过去，不必立刻出重复帧。
+        /// 曾经试过压到 4ms（理由是这个等待在声卡回调路径上，睡太久声卡会空），
+        /// 实测反而更糟：145 次欠载、2.2 秒重复帧、漂移补偿被打到 2.5% 的上限。
+        /// 说明能等到的短空档本来就该等——立刻补帧只是把一个更小的空档换成一个更大的重复段。
+        /// </summary>
         public int UnderrunWaitMs = 15;
 
         /// <summary>
@@ -443,7 +448,8 @@ namespace AudioStream.AudioServer
                 var reader = buffer.CreateReader();
                 var source = new BroadcastReaderSource(reader, format, tuning, output.Stats);
                 output.Reader = reader;
-                // 攒到目标水位的一半再起播：一起播就欠载的话，开头那段只能是噼啪声
+                // 攒到目标水位的一半再起播。起播门槛压得太低，起播后撑不了多久就要欠载，
+                // 开头那段只能是噼啪声；抬得太高又会把起播拖得明显。一半是这两头的折中。
                 output.StartThresholdBytes = Math.Max(format.BlockAlign,
                     (long)(format.BytesPerSecond / 1000.0 * tuning.TargetBufferMs / 2));
                 output.CreatedAt = Environment.TickCount;

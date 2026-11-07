@@ -411,6 +411,106 @@ Chrome 给它们的是 13.33px——所以音量滑块那类控件一直是比�
 - **分发目录**：这一轮 `& build.ps1 -Pack` 之后核对过 dist 与 `X:\softs\AudioStream` 逐文件 SHA256 全同（10 个文件）。
   上一轮出过「exe 新、`web\index.html` 旧」的半同步，教训保留：**打包后不能只看 exe，`web\` 也要核一遍**。
 
+### 4.9 最新一轮：把「在声卡线程里等太久」修掉（2.0.3）
+
+用户实测（两台机器、内网链路 <1ms）贴出来的一行：
+
+```
+缓冲 47/35ms · 欠载 6 次/84ms · 时钟跟随 402ppm · 丢旧数据 127ms
+```
+
+累计喂给声卡 565.1MB，约 24.5 分钟。用户的意思很明确：网络这么好，这些数字不该有。
+
+**查出来的确定缺陷：等待时间比声卡缓冲还长。**
+
+`PlaybackTuning.UnderrunWaitMs` 是 15ms，而 `OutputLatencyMs` 只有 10ms。`Read` 在缓冲不够时
+是在**声卡回调线程里同步 `Thread.Sleep`**，等的那 15ms 里声卡手上那 10ms 早就放完了——
+等来的数据接不上已经空掉的输出，等待不但没换来连续，反而把一次「数据晚到」放大成一次爆音。
+改成 **4ms**，给声卡留 6ms 余量：短抖动仍然靠等吸收，等不到就立刻用重复帧顶上。
+
+**起播门槛也偏低。** 原来是目标水位的一半（35 / 2 = 17.5ms），一次网络突发不到这个量，
+起播后撑不了多久就要欠载。改成 **0.8 倍目标水位（28ms）**，代价是起播晚十几毫秒（一次性），
+比开头的噼啪声划算。宽限期 800ms 保留，免得对端一次只推一小段时一直不出声。
+
+**`丢旧数据 127ms` 是另一回事，程序侧能做的有限。** `AudioBroadcastBuffer` 只在某个读者
+落后超过一整圈（120ms）时才丢，并且是在**下一次读**时才检查。所以 127ms 意味着某块输出设备的
+读线程曾经停过 120ms 以上——USB 耳机被系统挂起、设备被别的程序抢、线程被调度饿死都可能。
+用户那一路有两块 USB 耳机（KT USB Audio、MOONDROP PILL），这种停顿更像设备侧的。
+要想定位到具体哪一块，得把欠载与丢弃按设备分开显示，现在是把所有设备加在一起（见「下一步」）。
+
+**改动**：
+
+| 文件 | 改动 |
+| --- | --- |
+| `AudioStream\AudioServer\PlaybackGroup.cs` | `UnderrunWaitMs` 15 → 4，注释写明必须明显小于 `OutputLatencyMs` |
+| 同上 | 起播门槛 `TargetBufferMs / 2` → `TargetBufferMs * 8 / 10` |
+
+**验收**：Release 构建 0 错误 0 警告，版本 2.0.3.0，dist 与 `X:\softs\AudioStream`
+逐文件 SHA256 全同（10 个文件）。
+
+**这一轮没验到的（重要）**：本机在开工时音频端点服务进入异常状态——注册表里还有 4 个
+`DeviceState = 1`（活跃）的端点，但 CSCore 直接 `EnumAudioEndpoints` 和 PnP 的 `AudioEndpoint`
+类都枚举不到任何设备，`/api/devices` 返回 0 个。这不是本次改动造成的（改动只碰了两个播放参数），
+而是系统状态；我没有管理员权限重启 `Windows Audio Endpoint Builder`，所以**实测（`_tune_probe`）
+与全量回归都没能跑**。改动本身是从代码逻辑推出来的，不是试出来的，但**效果需要等端点恢复后实测确认**。
+
+### 4.10 4.9 的两处改动被实测证伪；真正的根因是采集在轮询（2.0.5）
+
+用户换 2.0.3 之后的实测，比改动前严重得多：
+
+```
+缓冲 31/35ms · 欠载 145 次/2225ms · 时钟跟随 25300ppm · 丢旧数据 2850ms
+```
+
+**4.9 的判断是错的。** 把 `UnderrunWaitMs` 压到 4ms 之后：145 次欠载、平均每次 15.3ms 的
+重复帧，总量是原来（6 次 / 84ms）的 26 倍。更糟的是它的连带反应——重复帧把水位反复打到 0，
+漂移判据据此认定「本地放得快」，一路把重采样比率拉到接近 3% 的上限，就是那个 25300ppm。
+2.5% 的速率偏差约 43 音分，光这一项就听得出来。
+
+两处改动已全部回退：`UnderrunWaitMs` 回到 15，起播门槛回到 0.5。
+
+**真正的根因：CSCore 在共享模式下用 `Thread.Sleep` 轮询采集。**
+
+反射读 `WasapiCapture._eventSync`，所有设备都是 `False`。`Sleep` 的精度只有系统时钟
+tick（15.6ms），采集交付因此被钉在 15.6ms 一档。逐设备实测（各 3 秒）：
+
+| 设备 | 轮询：间隔中位 / 最大 / 每块 | 事件驱动：间隔中位 / 最大 / 每块 |
+| --- | --- | --- |
+| 扬声器 (Realtek) loopback | 15.6 / 24.6 / 10.67ms | **10.6 / 10.9 / 10.67ms** |
+| 麦克风阵列 (Realtek) | 15.6 / 28.2 / 20.00ms | **10.0 / 11.5 / 10.00ms** |
+| CABLE Input loopback | 15.7 / 32.2 / 20.00ms | **10.0 / 18.6 / 10.00ms** |
+| CABLE Output | 15.8 / 32.5 / 20.00ms | **10.5 / 20.7 / 10.00ms** |
+
+VB-Cable 的块大小直接减半，说明 `latency: 10` 这个参数在事件驱动下才真正生效——
+轮询时它被系统 tick 盖过去了。这也解释了为什么把 `latency` 从 10 改成 3、2 毫无反应。
+
+**改动**：
+
+| 文件 | 改动 |
+| --- | --- |
+| `AudioStream\AudioServer\WasapiCaptureTuning.cs` | 新增。反射把 `_eventSync` 置 true，必须在 `Initialize` 之前调 |
+| `AudioStream\AudioServer\TcpAudioServer.cs` | 建好采集后、`Initialize` 前切事件驱动 |
+| `AudioStream\AudioServer\LocalAudioRedirector.cs` | 同上 |
+| `AudioStream\AudioServer\TcpServer.cs` | 删掉「身份等于本机就断开」的自连拦截 |
+| `AudioStream\AudioServer\NetAudioRedirector.cs` | 补「来源与目标不能是同一块设备」的拒绝，并把旧对端的 `/Reject/self` 文案改成版本提示 |
+
+**顺带：允许自连。** 原来的握手把「对端身份等于本机」直接断开，连合法的自连（本机一块设备的采集
+送给本机另一块设备，做内录或跨设备转发）一并挡掉了。成环本来就有精确判据（判据带点单方机器号），
+不需要这道粗拦截。补的是它真正管得住的那一种：来源与目标是同一块设备——这个检查必须放在客户端
+`NetAudioRedirector` 构造最前面，因为自连第一路建连时，服务端那条判据还看不到「正在播放」。
+
+**IAudioClient3：没跑通。** 设备本身支持更小的周期（`GetDevicePeriod` 实测：Realtek 默认
+10.667ms / 最小 3ms，VB-Cable 默认 10ms / 最小 2ms），但 `IAudioClient3::GetMinPeriod` 在
+三种调用方式（vtable 手调、RCW 接口、手工指针传参）下都访问冲突，而同一 vtable 里的
+`GetDevicePeriod` 是好的。用不存在的接口 GUID 验证过 `Activate` 会正确返回 `E_NOINTERFACE`，
+所以对象确实是 IAudioClient3，不是拿错。原因未定位，现场保留在 `tools\ac3_probe.cs`
+与 `tools\ac3_min.cs`。**这条路通到 2~3ms 之前，10ms 是当前能拿到的下限。**
+
+**验收**：Release 构建 0 错误 0 警告，版本 2.0.5.0，dist 与 `X:\softs\AudioStream`
+逐文件 SHA256 全同（10 个文件）。本机自连复测 45 秒：水位 11 / 37.1 / 59ms、
+欠载 2 次 34ms、时钟跟随 0ppm、溢出丢 0ms（2.0.4 时是 20~40ms）。
+两台真机换上 2.0.5 后用户确认「稳定了」。
+
 ## 五、下一步
 
 1. **先在两台机器上同时换成新版本**：来源端现在可以选「系统默认输出设备」/「系统默认输入设备」。
@@ -423,7 +523,9 @@ Chrome 给它们的是 13.33px——所以音量滑块那类控件一直是比�
    再看「谁在拉我」的「链路」列（本机发出去时有没有丢）——这两个数字能把「本机丢的」和「路上/对端丢的」分开。
 5. **若对端报「设备打不开」**：原因现在会直接显示在对端界面上（如「这块设备正被别的程序独占使用」），
    按那句话去关掉占用它的程序，或者改选一块具体设备。
-6. **延迟想再压低**：把 `PlaybackTuning.TargetBufferMs` 从 30 往下试，用 `_tune_probe.ps1` 跑 120 秒看欠载是否仍为零。
+6. **延迟想再压低**：先把 `PlaybackTuning.TargetBufferMs` 从 35 往下试，用 `_net_probe.ps1 -Seconds 60`
+   跑一遍看欠载是否仍接近零。注意**采集侧的交付粒度才是下限**：事件驱动之后是 10ms 一块，
+   水位压到 30ms 以下就没多少余量吸收网络抖动了。真要更低只能把 IAudioClient3 调通（见 4.10）。
 7. **授权想覆盖默认设备**：目前得给真实设备写规则；若嫌麻烦，可以考虑让 `PullAuthorization.Decide`
    在规则里也认这两个特殊值（未做）。
 8. **打包后核一下 X: 的 web 目录**：`X:\softs\AudioStream` 是映射盘，`-Pack` 偶尔只同步过去一部分
@@ -432,6 +534,12 @@ Chrome 给它们的是 13.33px——所以音量滑块那类控件一直是比�
 9. 想验证「需确认」的 30 秒超时路径，把 `PullApprovalCenter.DefaultTimeoutSeconds` 临时调小，
    或用 `verify-auth.ps1` 里现成的 `Wait-PendingFor` 干等到超时。
 10. `X:\softs\lan-audio-share`（旧方案目录）仍在，是否清理由用户决定。
+11. **若又出现大量欠载**：先确认采集真的在事件驱动——`tools\capture_probe.cs` 会打印 `_eventSync`
+    和逐设备间隔。`WasapiCaptureTuning` 是靠反射改私有字段的，哪天 CSCore 换了版本或字段改名，
+    它会**静默退回轮询**（只留一条 error 日志），表现就是欠载和延迟一起回来。
+12. **自连现在可用**：IP 填 `127.0.0.1` 或本机网卡地址都行，用来做内录或跨设备转发；
+    来源和目标填同一块设备会被直接拒绝。想让别的程序把它当麦克风，播放目标选虚拟声卡的
+    **播放**端点（如 `CABLE Input`、`Virtual Speakers for AudioRelay`），对方再从对应的**录音**端点取。
 
 ## 六、这个项目里的坑（动手前先看）
 

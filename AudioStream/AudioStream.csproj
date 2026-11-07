@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
   <PropertyGroup>
@@ -28,7 +28,7 @@
     <PublisherName>yiyiooo</PublisherName>
     <OpenBrowserOnPublish>false</OpenBrowserOnPublish>
     <ApplicationRevision>37</ApplicationRevision>
-    <ApplicationVersion>2.0.2.%2a</ApplicationVersion>
+    <ApplicationVersion>2.0.5.%2a</ApplicationVersion>
     <UseApplicationTrust>false</UseApplicationTrust>
     <PublishWizardCompleted>true</PublishWizardCompleted>
     <BootstrapperEnabled>true</BootstrapperEnabled>
@@ -125,6 +125,7 @@
     <Compile Include="AudioServer\PlaybackGroup.cs" />
     <Compile Include="AudioServer\PlayerControl.cs" />
     <Compile Include="AudioServer\TcpAudioServer.cs" />
+    <Compile Include="AudioServer\WasapiCaptureTuning.cs" />
     <Compile Include="AudioServer\LocalAudioRedirector.cs" />
     <Compile Include="AudioServer\MachineIdentity.cs" />
     <Compile Include="AudioServer\PullApprovalCenter.cs" />

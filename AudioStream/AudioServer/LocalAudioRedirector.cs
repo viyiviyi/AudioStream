@@ -84,6 +84,8 @@ namespace AudioStream
                     wasapiCapture = new WasapiCapture(false, AudioClientShareMode.Shared, latency: CaptureLatencyMs);
                 }
                 wasapiCapture.Device = sourceDevice;
+                // 必须在 Initialize 之前：事件句柄是在 Initialize 里建好交给声卡的
+                WasapiCaptureTuning.UseEventSync(wasapiCapture);
                 wasapiCapture.Initialize();
 
                 var format = wasapiCapture.WaveFormat;

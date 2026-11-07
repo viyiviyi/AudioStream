@@ -100,6 +100,22 @@ namespace AudioStream.AudioServer
             _Volume = Volume;
             _address = address;
             isRun = true;
+            // 来源和目标不能是同一块设备：那等于把刚放出去的声音再采回来，会一直自激啸叫。
+            // 服务端那条采播冲突判据管不到「自连的第一路」——建连时它还没开始往这块设备播放。
+            if (targets != null && !string.IsNullOrEmpty(sourceDeviceID))
+            {
+                foreach (var target in targets)
+                {
+                    if (target == null) continue;
+                    var targetId = target.Device != null ? target.Device.DeviceID : target.DeviceId;
+                    if (!string.IsNullOrEmpty(targetId) &&
+                        string.Equals(targetId, sourceDeviceID, StringComparison.OrdinalIgnoreCase))
+                    {
+                        throw new InvalidOperationException(
+                            "来源和目标不能是同一块设备：那样会把放出去的声音再采回来，形成啸叫。请换一块设备。");
+                    }
+                }
+            }
             try
             {
                 // 连接到远程设备
@@ -298,7 +314,7 @@ namespace AudioStream.AudioServer
         {
             if (reply.StartsWith("/Reject/self"))
             {
-                return "对端认出这是它自己。如果填的是本机地址，请把 IP 留空，改成本机设备之间流转。";
+                return "对端把这条连接当成自连拒掉了。对端是旧版本才会这样，换成允许自连的版本即可。";
             }
             if (reply.StartsWith("/Reject/loop"))
             {
