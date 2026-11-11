@@ -18,5 +18,9 @@ dist/
 # 本地打包的发行压缩包（上传 GitHub Release 用，不入库）
 release/
 
+# 开发期临时产物：无头浏览器 profile、交互态截图目录
+tools/_chrome_*/
+tools/_ui_states/
+
 # 安卓端不跟 PC 端放在同一个仓库里管理
 android/
