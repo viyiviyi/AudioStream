@@ -713,6 +713,16 @@ VB-Cable 的块大小直接减半，说明 `latency: 10` 这个参数在事件�
     `find` 返回的是**用户那条**，收尾清理把用户自己的配置删了。正确做法：跑之前先记下已有的 ID 集合，
     之后只认「不在集合里的那条」，清理断言也改成与基线条数比较。
 
+36. **改版本号后 `dotnet build` 可能整块跳过，git 也可能看不见这次改动**（2.1.0 踩到）：
+    `AssemblyInfo.cs` 与 csproj 的 `ApplicationVersion` 一起从 `2.0.5` 改成 `2.1.0`，两处都是等长替换
+    （`2.0.5.0` → `2.1.0.0`），文件字节数一个没变。于是 `dotnet build` 判定「无需重新生成」，
+    产出的 exe **仍然是 `2.0.5.0`**，而命令行只回一句「已成功生成」，看不出任何异常。
+    更隐蔽的是 git：大小与 mtime 都没变化时它连内容都不比，`git status` 干净、`git add -A` 直接把版本号漏掉
+    （这次提交只带上了 PROGRESS.md，等发现时已经打好标签）。
+    做法：改完版本号先 `dotnet build -t:Rebuild`，再用
+    `(Get-Item exe).VersionInfo.FileVersion` 核对；提交前 `touch` 这两个文件，
+    并在 `git show --stat` 里确认它们真的进了提交。
+
 ## 七、本轮改动的文件
 
 | 文件 | 改动 |
